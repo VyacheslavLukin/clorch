@@ -35,6 +35,7 @@ def make_agent_state(tmp_state_dir):
         last_event_time: str = "2026-02-22T10:30:00Z",
         notification_message: str | None = None,
         activity_history: list[int] | None = None,
+        tool_request_summary: str | None = None,
     ) -> Path:
         if activity_history is None:
             activity_history = [0, 1, 2, 3, 2, 1, 0, 3, 2, 1]
@@ -56,6 +57,7 @@ def make_agent_state(tmp_state_dir):
             "started_at": started_at,
             "notification_message": notification_message,
             "activity_history": activity_history,
+            "tool_request_summary": tool_request_summary,
         }
         path = tmp_state_dir / f"{session_id}.json"
         path.write_text(json.dumps(state))

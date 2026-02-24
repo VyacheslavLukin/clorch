@@ -5,7 +5,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.events import Key
 from textual.screen import ModalScreen
-from textual.containers import Horizontal, Vertical
+from textual.containers import Vertical
 from textual.widgets import Input, Label, Static
 
 from clorch.state.manager import StateManager
@@ -14,7 +14,6 @@ from clorch.constants import AgentStatus, ANIM_INTERVAL
 from clorch.tui.widgets.session_list import SessionList
 from clorch.tui.widgets.agent_detail import AgentDetail
 from clorch.tui.widgets.header_bar import HeaderBar
-from clorch.tui.widgets.action_panel import ActionPanel
 from clorch.tui.widgets.context_footer import ContextFooter
 
 
@@ -163,19 +162,11 @@ class OrchestratorApp(App):
         self._has_ever_approved: bool = False
         self._hint_shown: bool = False
         self._anim_frame: int = 0
-        self._is_narrow: bool = False
-
-    # Responsive breakpoint (columns)
-    NARROW_THRESHOLD = 120
 
     def compose(self) -> ComposeResult:
         yield HeaderBar(id="header-bar")
-        with Horizontal(id="main"):
-            yield SessionList(id="session-list")
-            with Vertical(id="sidebar"):
-                yield AgentDetail(id="detail-panel")
-                yield ActionPanel(id="action-panel")
-        yield AgentDetail(id="narrow-detail")
+        yield SessionList(id="session-list")
+        yield AgentDetail(id="detail-panel")
         yield ContextFooter(id="context-footer")
 
     def on_mount(self) -> None:
@@ -186,31 +177,6 @@ class OrchestratorApp(App):
         self._poll_state()
         self._apply_tmux_statusbar()
         self._init_header_tmux()
-        # Initial responsive check
-        self._is_narrow = self.size.width < self.NARROW_THRESHOLD
-        self._apply_responsive_mode()
-
-    def on_resize(self, event) -> None:
-        """Switch between wide/narrow layout based on terminal width."""
-        narrow = self.size.width < self.NARROW_THRESHOLD
-        if narrow != self._is_narrow:
-            self._is_narrow = narrow
-            self._apply_responsive_mode()
-
-    def _apply_responsive_mode(self) -> None:
-        """Toggle CSS classes for wide/narrow layout."""
-        if self._is_narrow:
-            self.add_class("narrow")
-        else:
-            self.remove_class("narrow")
-        # Update the appropriate detail panel
-        if self._detail_mode != "hidden":
-            table = self.query_one("#session-list", SessionList)
-            agent = table.get_selected_agent()
-            if self._is_narrow:
-                self.query_one("#narrow-detail", AgentDetail).show_agent(agent)
-            else:
-                self.query_one("#detail-panel", AgentDetail).show_agent(agent)
 
     def _run_cleanup(self) -> None:
         """Remove stale state files (no activity for 30+ minutes)."""
@@ -233,7 +199,6 @@ class OrchestratorApp(App):
 
         # Build action queue
         self._action_items = build_action_queue(agents)
-        self.query_one("#action-panel", ActionPanel).update_actions(self._action_items)
 
         # Update session list (agents + inline action hints)
         table = self.query_one("#session-list", SessionList)
@@ -257,10 +222,7 @@ class OrchestratorApp(App):
         # Update detail if visible
         if self._detail_mode != "hidden":
             selected = table.get_selected_agent()
-            if self._is_narrow:
-                self.query_one("#narrow-detail", AgentDetail).show_agent(selected)
-            else:
-                self.query_one("#detail-panel", AgentDetail).show_agent(selected)
+            self.query_one("#detail-panel", AgentDetail).show_agent(selected)
 
         # First-permission hint (one-time toast)
         has_perm = any(item.actionable for item in self._action_items)
@@ -354,13 +316,11 @@ class OrchestratorApp(App):
 
         # a-z: select action by letter
         if len(key) == 1 and "a" <= key <= "z":
-            action_panel = self.query_one("#action-panel", ActionPanel)
-            action = action_panel.get_action(key)
+            action = self._get_action(key)
             if action:
                 if action.actionable:
                     # PERM: focus the action for y/n
                     self._focused_action = action
-                    action_panel.set_focus(key)
                     self.query_one("#session-list", SessionList).set_action_focus(key)
                     self._update_footer_mode()
                     name = action.agent.project_name or action.agent.session_id[:12]
@@ -385,9 +345,15 @@ class OrchestratorApp(App):
     def _clear_focused_action(self) -> None:
         """Clear the focused action and reset footer/queue state."""
         self._focused_action = None
-        self.query_one("#action-panel", ActionPanel).clear_focus()
         self.query_one("#session-list", SessionList).clear_action_focus()
         self._update_footer_mode()
+
+    def _get_action(self, letter: str) -> ActionItem | None:
+        """Look up an action by its assigned letter."""
+        for item in self._action_items:
+            if item.letter == letter:
+                return item
+        return None
 
     # ------------------------------------------------------------------
     # Action handlers
@@ -486,8 +452,7 @@ class OrchestratorApp(App):
             if 0 <= idx < len(table._agents):
                 table.move_cursor(row=idx)
             if self._detail_mode != "hidden":
-                detail_id = "#narrow-detail" if self._is_narrow else "#detail-panel"
-                self.query_one(detail_id, AgentDetail).show_agent(agent)
+                self.query_one("#detail-panel", AgentDetail).show_agent(agent)
 
     def _jump_to_session(self, agent: AgentState) -> None:
         """Jump to the terminal running the agent's Claude process.
@@ -738,15 +703,11 @@ class OrchestratorApp(App):
     def on_session_list_agent_highlighted(self, event: SessionList.AgentHighlighted) -> None:
         """Update detail panel when cursor moves to a new agent."""
         if self._detail_mode != "hidden":
-            if self._is_narrow:
-                self.query_one("#narrow-detail", AgentDetail).show_agent(event.agent)
-            else:
-                self.query_one("#detail-panel", AgentDetail).show_agent(event.agent)
+            self.query_one("#detail-panel", AgentDetail).show_agent(event.agent)
 
     def action_toggle_detail(self) -> None:
         """Cycle detail panel: normal -> expanded -> hidden -> normal."""
         detail = self.query_one("#detail-panel", AgentDetail)
-        action_panel = self.query_one("#action-panel", ActionPanel)
 
         if self._detail_mode == "normal":
             self._detail_mode = "expanded"
@@ -756,38 +717,24 @@ class OrchestratorApp(App):
             self._detail_mode = "normal"
 
         self._detail_visible = self._detail_mode != "hidden"
-        self._apply_detail_mode(detail, action_panel)
+        self._apply_detail_mode(detail)
 
-    def _apply_detail_mode(self, detail: AgentDetail, action_panel: ActionPanel) -> None:
+    def _apply_detail_mode(self, detail: AgentDetail) -> None:
         """Apply CSS classes and content based on current detail mode."""
-        narrow_detail = self.query_one("#narrow-detail", AgentDetail)
-
         # Reset all mode classes
         detail.remove_class("expanded", "detail-hidden")
-        action_panel.remove_class("detail-expanded")
 
         table = self.query_one("#session-list", SessionList)
         agent = table.get_selected_agent()
 
         if self._detail_mode == "normal":
-            # Both visible, detail has max-height cap
-            if self._is_narrow:
-                narrow_detail.show_agent(agent)
-            else:
-                detail.show_agent(agent)
+            detail.show_agent(agent)
         elif self._detail_mode == "expanded":
-            # Detail takes full sidebar, action panel hidden
             detail.add_class("expanded")
-            action_panel.add_class("detail-expanded")
-            if self._is_narrow:
-                narrow_detail.show_agent(agent)
-            else:
-                detail.show_agent(agent)
+            detail.show_agent(agent)
         else:
-            # Hidden — detail gone, action panel takes full sidebar
             detail.add_class("detail-hidden")
             detail.show_agent(None)
-            narrow_detail.show_agent(None)
 
     def action_jump_to_agent(self) -> None:
         """Jump to the selected agent's tmux window."""

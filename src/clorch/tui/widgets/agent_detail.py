@@ -1,4 +1,4 @@
-"""Agent detail panel — structured key-value display in the sidebar."""
+"""Agent detail panel — bottom panel showing agent info or PERM details."""
 from __future__ import annotations
 
 from textual.widgets import Static
@@ -6,7 +6,7 @@ from rich.text import Text
 
 from clorch.state.models import AgentState
 from clorch.constants import (
-    STATUS_DISPLAY, SPARKLINE_CHARS,
+    AgentStatus, STATUS_DISPLAY, SPARKLINE_CHARS,
     CYAN, GREEN, GREY, PINK, RED, YELLOW,
 )
 
@@ -17,15 +17,15 @@ _LABEL_W = 12
 class AgentDetail(Static):
     """Shows detailed information about the selected agent.
 
-    Structured key-value layout with semantic colors, extended sparkline,
-    and recent tools breadcrumb.
+    When the agent is WAITING_PERMISSION and has a tool_request_summary,
+    renders a special PERM view with syntax-highlighted request details.
+    Otherwise renders the normal key-value detail view.
     """
 
     DEFAULT_CSS = """
     AgentDetail {
         height: auto;
-        max-height: 16;
-        border: solid;
+        max-height: 10;
         padding: 0 1;
     }
     """
@@ -40,6 +40,53 @@ class AgentDetail(Static):
             self.update("")
             return
 
+        if (
+            agent.status == AgentStatus.WAITING_PERMISSION
+            and agent.tool_request_summary
+        ):
+            self._render_perm_view(agent)
+        else:
+            self._render_normal_view(agent)
+
+    def _render_perm_view(self, agent: AgentState) -> None:
+        """Render PERM request detail with syntax highlighting."""
+        text = Text()
+
+        # Header: [!] PERM  project_name  ToolName
+        text.append("[!] PERM", style=f"bold {RED}")
+        text.append("  ", style="dim")
+        text.append(agent.project_name or agent.session_id[:12], style="bold white")
+        text.append("  ", style="dim")
+        text.append(agent.last_tool or "?", style=f"bold {YELLOW}")
+        text.append("\n")
+
+        # Body: summary with syntax highlighting
+        summary = agent.tool_request_summary or ""
+        for line in summary.split("\n")[:6]:  # cap to 6 lines
+            if line.startswith("$ "):
+                text.append(line, style=f"bold {GREEN}")
+            elif line.startswith("- "):
+                text.append(line, style=RED)
+            elif line.startswith("+ "):
+                text.append(line, style=GREEN)
+            elif line.startswith("/") or line.startswith("~"):
+                text.append(line, style=CYAN)
+            else:
+                text.append(line, style="white")
+            text.append("\n")
+
+        # Footer: action hints
+        text.append("[y]", style=f"bold reverse {GREEN}")
+        text.append(" APPROVE  ", style="dim")
+        text.append("[n]", style=f"bold reverse {RED}")
+        text.append(" DENY  ", style="dim")
+        text.append("[->]", style=f"bold {CYAN}")
+        text.append(" jump", style="dim")
+
+        self.update(text)
+
+    def _render_normal_view(self, agent: AgentState) -> None:
+        """Render normal key-value detail view."""
         symbol, label, color = STATUS_DISPLAY[agent.status]
 
         text = Text()

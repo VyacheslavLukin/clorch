@@ -36,6 +36,7 @@ class AgentState:
     # tmux mapping (filled by navigator)
     tmux_window: str = ""
     tmux_pane: str = ""
+    tool_request_summary: str | None = None
 
     @property
     def uptime(self) -> str:
@@ -86,6 +87,7 @@ class AgentState:
             pid=data.get("pid"),
             tmux_window=data.get("tmux_window", ""),
             tmux_pane=data.get("tmux_pane", ""),
+            tool_request_summary=data.get("tool_request_summary"),
         )
 
 
@@ -171,7 +173,7 @@ def build_action_queue(agents: list[AgentState]) -> list[ActionItem]:
     for i, agent in enumerate(attention[:26]):
         letter = chr(ord("a") + i)
         actionable = agent.status == AgentStatus.WAITING_PERMISSION
-        summary = agent.notification_message or ""
+        summary = agent.notification_message or agent.tool_request_summary or ""
         items.append(ActionItem(
             letter=letter,
             agent=agent,

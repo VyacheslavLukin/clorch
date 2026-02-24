@@ -75,9 +75,10 @@ class SessionRow(ListItem):
     # Fixed column widths for vertical alignment across all rows.
     _COL_ACCENT = 2     # "┃ " or "  "
     _COL_NUM = 3        # "[a]" or " 1 "
-    _COL_PROJECT = 18   # project name padded
+    _COL_PROJECT = 22   # project name padded
     _COL_STATUS = 8     # ">>> WORK" / "[!] PERM" — symbol(3) + space + label(4)
-    _COL_TOOL = 10      # last tool name padded
+    _COL_MODEL = 8      # opus/sonnet/haiku
+    _COL_TOOL = 12      # last tool name padded
     _COL_TCNT = 4       # tool count right-aligned
     _COL_ECNT = 3       # error count right-aligned
     _COL_UPTIME = 8     # "1h 23m" right-aligned
@@ -126,7 +127,11 @@ class SessionRow(ListItem):
         status_str = f"{symbol} {label:<4s}"
         text.append(f" {status_str:<{self._COL_STATUS}s}", style=f"bold {color}")
 
-        # Col 5: Last tool (fixed 10 chars)
+        # Col 4b: Model (fixed 8 chars)
+        model_short = self._short_model(agent.model)
+        text.append(f" {model_short:<{self._COL_MODEL}s}", style=f"dim {CYAN}")
+
+        # Col 5: Last tool (fixed 12 chars)
         tool = (agent.last_tool or "-")[:self._COL_TOOL]
         text.append(f" {tool:<{self._COL_TOOL}s}", style="white")
 
@@ -151,7 +156,7 @@ class SessionRow(ListItem):
         # Col 10: Notification message (remaining space)
         msg = agent.notification_message or ""
         if msg:
-            trunc = msg[:40] if len(msg) > 40 else msg
+            trunc = msg[:60] if len(msg) > 60 else msg
             text.append(f"  {trunc}", style="dim italic")
 
         # Inline action hints
@@ -176,6 +181,20 @@ class SessionRow(ListItem):
             text.append(" cancel", style="dim")
 
         return text
+
+    @staticmethod
+    def _short_model(model: str) -> str:
+        """Convert full model ID to short display name."""
+        m = model.lower()
+        if "opus" in m:
+            return "opus"
+        if "sonnet" in m:
+            return "sonnet"
+        if "haiku" in m:
+            return "haiku"
+        if model:
+            return model[:7]
+        return "-"
 
     @staticmethod
     def _render_sparkline(history: list[int]) -> Text:

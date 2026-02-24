@@ -348,3 +348,64 @@ class TestBuildActionQueue:
         ]
         items = build_action_queue(agents)
         assert items[0].summary == ""
+
+    def test_summary_fallback_to_tool_request_summary(self):
+        """Summary falls back to tool_request_summary when notification_message is None."""
+        agents = [
+            AgentState(
+                session_id="s1",
+                status=AgentStatus.WAITING_PERMISSION,
+                tool_request_summary="$ rm -rf /tmp/test",
+            ),
+        ]
+        items = build_action_queue(agents)
+        assert items[0].summary == "$ rm -rf /tmp/test"
+
+    def test_summary_notification_takes_priority(self):
+        """notification_message takes priority over tool_request_summary."""
+        agents = [
+            AgentState(
+                session_id="s1",
+                status=AgentStatus.WAITING_PERMISSION,
+                notification_message="Allow Bash",
+                tool_request_summary="$ rm -rf /tmp/test",
+            ),
+        ]
+        items = build_action_queue(agents)
+        assert items[0].summary == "Allow Bash"
+
+
+# ------------------------------------------------------------------
+# AgentState.tool_request_summary
+# ------------------------------------------------------------------
+
+
+class TestToolRequestSummary:
+    """Tests for tool_request_summary field."""
+
+    def test_tool_request_summary_from_json(self, make_agent_state):
+        """tool_request_summary loads from JSON file."""
+        path = make_agent_state(
+            session_id="perm-test",
+            status="WAITING_PERMISSION",
+            tool_request_summary="$ ls -la /tmp",
+        )
+        agent = AgentState.from_json_file(path)
+        assert agent.tool_request_summary == "$ ls -la /tmp"
+
+    def test_tool_request_summary_default_none(self, make_agent_state):
+        """tool_request_summary defaults to None when not in JSON."""
+        path = make_agent_state(session_id="no-summary")
+        agent = AgentState.from_json_file(path)
+        assert agent.tool_request_summary is None
+
+    def test_tool_request_summary_none_in_json(self, tmp_state_dir):
+        """tool_request_summary is None when explicitly null in JSON."""
+        import json
+        path = tmp_state_dir / "null-summary.json"
+        path.write_text(json.dumps({
+            "session_id": "null-summary",
+            "tool_request_summary": None,
+        }))
+        agent = AgentState.from_json_file(path)
+        assert agent.tool_request_summary is None

@@ -164,6 +164,7 @@ case "$EVENT" in
             .last_event = $last_event |
             .last_event_time = $last_event_time |
             .notification_message = null |
+            .tool_request_summary = null |
             .tool_count = ((.tool_count // 0) + 1) |
             .activity_history = (
                 (.activity_history // [0,0,0,0,0,0,0,0,0,0]) |
@@ -182,7 +183,8 @@ case "$EVENT" in
             .status = $status |
             .last_event = $last_event |
             .last_event_time = $last_event_time |
-            .notification_message = null
+            .notification_message = null |
+            .tool_request_summary = null
             ' > "$TEMP_FILE"
         mv "$TEMP_FILE" "$STATE_FILE"
         ;;
@@ -196,7 +198,8 @@ case "$EVENT" in
             .status = $status |
             .last_event = $last_event |
             .last_event_time = $last_event_time |
-            .error_count = ((.error_count // 0) + 1)
+            .error_count = ((.error_count // 0) + 1) |
+            .tool_request_summary = null
             ' > "$TEMP_FILE"
         mv "$TEMP_FILE" "$STATE_FILE"
         ;;
@@ -227,16 +230,47 @@ case "$EVENT" in
     PermissionRequest)
         TOOL_NAME="$(echo "$INPUT_JSON" | jq -r '.tool_name // "unknown"')"
 
+        # Build tool_request_summary from tool_input for TUI detail view
+        TOOL_SUMMARY="$(echo "$INPUT_JSON" | jq -r --arg tool "$TOOL_NAME" '
+            .tool_input as $inp |
+            if $inp == null then "" else
+            (if $tool == "Bash" then
+                "$ " + (($inp.command // "") | .[0:300])
+            elif $tool == "Edit" then
+                (($inp.file_path // "") + "\n" +
+                 (($inp.old_string // "") | split("\n") | .[0:3] | map("- " + .) | join("\n")) + "\n" +
+                 (($inp.new_string // "") | split("\n") | .[0:3] | map("+ " + .) | join("\n")))
+            elif $tool == "Write" then
+                (($inp.file_path // "") + " (" + (($inp.content // "") | split("\n") | length | tostring) + " lines)\n" +
+                 (($inp.content // "") | split("\n") | .[0:3] | join("\n")))
+            elif $tool == "Read" then
+                ($inp.file_path // "")
+            elif $tool == "WebFetch" then
+                ($inp.url // "")
+            elif $tool == "Task" then
+                "[" + ($inp.subagent_type // "?") + "] " + ($inp.description // "")
+            elif $tool == "Grep" then
+                ($inp.pattern // "") + (if $inp.path then " in " + $inp.path else "" end)
+            elif $tool == "Glob" then
+                ($inp.pattern // "") + (if $inp.path then " in " + $inp.path else "" end)
+            else
+                ($inp | tostring | .[0:300])
+            end) | .[0:500]
+            end
+        ')"
+
         echo "$CURRENT_STATE" | jq \
             --arg status "WAITING_PERMISSION" \
             --arg tool "$TOOL_NAME" \
             --arg last_event "PermissionRequest" \
             --arg last_event_time "$NOW" \
+            --arg summary "$TOOL_SUMMARY" \
             '
             .status = $status |
             .last_tool = $tool |
             .last_event = $last_event |
-            .last_event_time = $last_event_time
+            .last_event_time = $last_event_time |
+            .tool_request_summary = (if $summary == "" then null else $summary end)
             ' > "$TEMP_FILE"
         mv "$TEMP_FILE" "$STATE_FILE"
         ;;
@@ -250,7 +284,8 @@ case "$EVENT" in
             .status = $status |
             .last_event = $last_event |
             .last_event_time = $last_event_time |
-            .notification_message = null
+            .notification_message = null |
+            .tool_request_summary = null
             ' > "$TEMP_FILE"
         mv "$TEMP_FILE" "$STATE_FILE"
         ;;

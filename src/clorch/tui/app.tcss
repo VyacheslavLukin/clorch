@@ -13,17 +13,10 @@
     dock: bottom;
 }
 
-/* -- Main area: fills remaining space -- */
-
-#main {
-    height: 1fr;
-}
-
-/* -- Left panel: session list (ListView) -- */
+/* -- Session list: fills remaining space -- */
 
 #session-list {
-    width: 2fr;
-    min-width: 40;
+    width: 1fr;
     height: 1fr;
     min-height: 8;
     scrollbar-size: 1 1;
@@ -33,17 +26,12 @@
     background: #3A4A60;
 }
 
-/* -- Right panel: sidebar with detail + actions -- */
-
-#sidebar {
-    width: 1fr;
-    height: 1fr;
-    padding: 0 1;
-}
+/* -- Detail panel: docked to bottom -- */
 
 #detail-panel {
-    height: 1fr;
-    max-height: 16;
+    dock: bottom;
+    height: auto;
+    max-height: 10;
     padding: 0 1;
     border: solid #2A3040;
 }
@@ -54,42 +42,4 @@
 
 #detail-panel.detail-hidden {
     display: none;
-}
-
-#action-panel {
-    height: auto;
-    max-height: 12;
-    padding: 0 1;
-}
-
-#action-panel.hidden {
-    display: none;
-}
-
-#action-panel.detail-expanded {
-    display: none;
-}
-
-/* -- Narrow-mode detail panel (below main, hidden by default) -- */
-
-#narrow-detail {
-    display: none;
-    height: auto;
-    max-height: 10;
-    padding: 0 1;
-    border: solid #2A3040;
-}
-
-/* -- Responsive: narrow mode (<120 cols) -- */
-
-.narrow #sidebar {
-    display: none;
-}
-
-.narrow #session-list {
-    width: 1fr;
-}
-
-.narrow #narrow-detail {
-    display: block;
 }
