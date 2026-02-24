@@ -262,10 +262,10 @@ def _iterm_activate_tab(tab_ref: str) -> bool:
             tell application "iTerm2"
                 set w to item {w_idx} of windows
                 set t to item {t_idx} of tabs of w
+                tell w to select
+                select t
                 set s to item {s_idx} of sessions of t
                 select s
-                select t
-                tell w to select
                 tell application "System Events" to tell process "iTerm2" to set frontmost to true
                 return "found"
             end tell
