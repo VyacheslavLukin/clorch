@@ -1,27 +1,35 @@
 # Clorch
 
+> **Status: alpha** — works daily on the author's machine, API may change.
+
 Mission control for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions.
 
 ![Clorch TUI](docs/clorch-screenshot.png)
 
-You run 10 agents across iTerm tabs. One asks for permission, two are idle, and you can't remember which tab has the one that's stuck. You Cmd-Tab through terminals, lose focus, and waste minutes just *finding* the right session.
+You run 10 agents in tmux. One asks for permission, two are idle, and you can't remember which window has the one that's stuck. You cycle through panes, lose focus, and waste minutes just *finding* the right session.
 
-Clorch fixes this. One dashboard shows every agent's status. Permission request pops up — press `y` without switching tabs. Need to jump to a session — press `Enter`. That's it.
+Clorch fixes this. One dashboard shows every agent's status. Permission request pops up — press `y` right from the dashboard. Need to jump to a session — press `→`. That's it.
 
 ## Features
 
 - **Real-time tracking** — hooks push events, no terminal scraping or polling
 - **Approve / deny** permissions without leaving the dashboard (`y` / `n` / `Y` for all)
-- **Jump** to any agent's iTerm2 tab in one keystroke
+- **Jump** to any agent's tmux window in one keystroke
 - **Action queue** — pending permissions are listed with hotkeys, newest first
+- **tmux status-bar widget** — agent counts at a glance
 - **macOS notifications** and terminal bell when an agent needs attention
-- **tmux support** — status-bar widget, window splits, and navigation
 
 ## Quick Start
 
 ```bash
-# Install from source
-pip install -e .
+# Prerequisites (macOS)
+brew install jq tmux
+
+# Prerequisites (Linux)
+# apt install jq tmux
+
+# Install Clorch
+pip install git+https://github.com/androsovm/clorch.git
 
 # Install hooks into Claude Code settings
 clorch init
@@ -68,7 +76,7 @@ clorch --version    Print version
 | `Y` | Approve **all** pending permissions |
 | `Esc` | Cancel selection |
 
-### tmux (optional)
+### tmux
 
 | Key | Action |
 |-----|--------|
@@ -76,7 +84,9 @@ clorch --version    Print version
 | `S` / `V` | Split selected agent's window (horizontal / vertical) |
 | `X` | Kill selected agent's tmux window |
 
-If you use tmux, add a status-bar widget to `~/.tmux.conf`:
+## tmux Status Bar
+
+Add to `~/.tmux.conf`:
 
 ```bash
 set -g status-right '#(clorch tmux-widget)'
@@ -111,8 +121,18 @@ Clorch does not read, modify, or access your project files. Here's what it touch
 
 - Python 3.10+
 - `jq` — used by hook scripts to parse JSON
-- `tmux` (optional) — enables splits, status-bar widget, and window management
-- macOS (optional) — native notifications via `osascript`; everything else works on Linux
+- `tmux` — agent sessions run in tmux windows
+
+## Platform Support
+
+| Feature | macOS + iTerm2 | macOS + Terminal | Linux |
+|---------|:-:|:-:|:-:|
+| Dashboard & approve/deny | yes | yes | yes |
+| Jump to agent (tmux) | yes | yes | yes |
+| Jump to agent (iTerm tab) | yes | — | — |
+| Native notifications | yes | yes | — |
+| Terminal bell | yes | yes | yes |
+| tmux status-bar widget | yes | yes | yes |
 
 ## Configuration
 
