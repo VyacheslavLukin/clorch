@@ -21,7 +21,7 @@ Screen {
     dock: bottom;
 }
 
-/* -- Main split: list left, detail right -- */
+/* -- Main split: list left, right panel right -- */
 
 #main-split {
     height: 1fr;
@@ -62,25 +62,46 @@ Screen {
     background: #4C566A;
 }
 
-/* -- Detail panel: bordered panel with title -- */
+/* -- Right panel: vertical stack of sub-panels -- */
 
-#detail-panel {
+#right-panel {
     width: 1fr;
     height: 1fr;
+}
+
+#right-panel.expanded {
+    width: 2fr;
+}
+
+#right-panel.detail-hidden {
+    display: none;
+}
+
+/* -- Sub-panels: each bordered -- */
+
+#detail-panel {
+    height: auto;
+    max-height: 8;
     border: round #4C566A;
     border-title-color: #88C0D0;
     border-title-style: bold;
     padding: 0 1;
 }
 
-#detail-panel:focus-within {
-    border: round #88C0D0;
+#telemetry-panel {
+    height: auto;
+    max-height: 12;
+    border: round #4C566A;
+    border-title-color: #88C0D0;
+    border-title-style: bold;
+    padding: 0 1;
 }
 
-#detail-panel.expanded {
-    width: 2fr;
-}
-
-#detail-panel.detail-hidden {
-    display: none;
+#event-log-panel {
+    height: 1fr;
+    border: round #4C566A;
+    border-title-color: #88C0D0;
+    border-title-style: bold;
+    padding: 0 1;
+    background: #2E3440;
 }

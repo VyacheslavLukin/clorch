@@ -61,6 +61,13 @@ ACCENT = THEME["accent"]
 # Activity history length (sparkline points)
 ACTIVITY_HISTORY_LEN = 10
 
+# Extended sparkline width for telemetry panel
+TELEMETRY_HISTORY_LEN = 30
+
+# How many poll ticks (0.5s each) to accumulate before pushing a sparkline point
+# 10 ticks × 0.5s = 5s per bucket → 30 slots × 5s = 2.5 min visible history
+TELEMETRY_BUCKET_TICKS = 10
+
 # Sparkline characters (8 levels)
 SPARKLINE_CHARS = "▁▂▃▄▅▆▇█"
 

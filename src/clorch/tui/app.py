@@ -10,11 +10,13 @@ from textual.widgets import Input, Label, Static
 
 from clorch.state.manager import StateManager
 from clorch.state.models import AgentState, StatusSummary, ActionItem, build_action_queue
-from clorch.constants import AgentStatus, ANIM_INTERVAL
+from clorch.constants import AgentStatus, ANIM_INTERVAL, TELEMETRY_HISTORY_LEN, TELEMETRY_BUCKET_TICKS
 from clorch.tui.widgets.session_list import SessionList, ListHeader
 from clorch.tui.widgets.agent_detail import AgentDetail
 from clorch.tui.widgets.header_bar import HeaderBar
 from clorch.tui.widgets.context_footer import ContextFooter
+from clorch.tui.widgets.telemetry_panel import TelemetryPanel
+from clorch.tui.widgets.event_log import EventLog
 
 
 class PromptScreen(ModalScreen[str | None]):
@@ -162,6 +164,10 @@ class OrchestratorApp(App):
         self._has_ever_approved: bool = False
         self._hint_shown: bool = False
         self._anim_frame: int = 0
+        self._prev_tool_counts: dict[str, int] = {}
+        self._extended_history: dict[str, list[int]] = {}
+        self._pending_deltas: dict[str, int] = {}
+        self._telemetry_tick: int = 0
 
     def compose(self) -> ComposeResult:
         yield HeaderBar(id="header-bar")
@@ -170,9 +176,16 @@ class OrchestratorApp(App):
                 lp.border_title = "Agents"
                 yield ListHeader(id="list-header")
                 yield SessionList(id="session-list")
-            detail = AgentDetail(id="detail-panel")
-            detail.border_title = "Detail"
-            yield detail
+            with Vertical(id="right-panel"):
+                detail = AgentDetail(id="detail-panel")
+                detail.border_title = "Detail"
+                yield detail
+                telemetry = TelemetryPanel(id="telemetry-panel")
+                telemetry.border_title = "Telemetry"
+                yield telemetry
+                event_log = EventLog(id="event-log-panel")
+                event_log.border_title = "Events"
+                yield event_log
         yield ContextFooter(id="context-footer")
 
     def on_mount(self) -> None:
@@ -211,7 +224,31 @@ class OrchestratorApp(App):
         table.update_agents(agents)
         table.update_actions(self._action_items)
 
-        # Toast on state changes
+        # --- Event detection (BEFORE updating _prev_states and _prev_tool_counts) ---
+        event_log = self.query_one("#event-log-panel", EventLog)
+        for agent in agents:
+            sid = agent.session_id
+            old_status = self._prev_states.get(sid)
+            if old_status is None:
+                continue  # new agent, skip
+            if old_status != agent.status:
+                # Status transition events
+                if agent.status == AgentStatus.WORKING:
+                    event_log.write_event(agent.project_name, "\u25b6", agent.last_tool or "working", "green")
+                elif agent.status == AgentStatus.IDLE:
+                    event_log.write_event(agent.project_name, "\u25fc", "idle", "grey")
+                elif agent.status == AgentStatus.WAITING_PERMISSION:
+                    summary_text = (agent.tool_request_summary or "")[:60]
+                    event_log.write_event(agent.project_name, "\u26a0", f"PERM: {summary_text}", "red")
+                elif agent.status == AgentStatus.ERROR:
+                    event_log.write_event(agent.project_name, "\u2717", "error", "pink")
+            # Tool usage (delta > 0 and status stayed WORKING)
+            elif agent.status == AgentStatus.WORKING:
+                delta = max(0, agent.tool_count - self._prev_tool_counts.get(sid, agent.tool_count))
+                if delta > 0 and agent.last_tool:
+                    event_log.write_event(agent.project_name, "\u2699", agent.last_tool, "cyan")
+
+        # --- Toast on state changes ---
         current_states: dict[str, AgentStatus] = {}
         for agent in agents:
             current_states[agent.session_id] = agent.status
@@ -225,10 +262,39 @@ class OrchestratorApp(App):
                 self.notify(f"{name}: {old_label} \u2192 {new_label}", severity=severity)
         self._prev_states = current_states
 
-        # Update detail if visible
+        # --- Extended history update (bucketed) ---
+        for agent in agents:
+            sid = agent.session_id
+            prev_tc = self._prev_tool_counts.get(sid, agent.tool_count)
+            delta = max(0, agent.tool_count - prev_tc)
+            self._prev_tool_counts[sid] = agent.tool_count
+            self._pending_deltas[sid] = self._pending_deltas.get(sid, 0) + delta
+
+        self._telemetry_tick += 1
+        if self._telemetry_tick >= TELEMETRY_BUCKET_TICKS:
+            self._telemetry_tick = 0
+            for sid, accumulated in self._pending_deltas.items():
+                hist = self._extended_history.setdefault(sid, [0] * TELEMETRY_HISTORY_LEN)
+                hist.append(accumulated)
+                if len(hist) > TELEMETRY_HISTORY_LEN:
+                    self._extended_history[sid] = hist[-TELEMETRY_HISTORY_LEN:]
+            self._pending_deltas.clear()
+
+        # Cleanup dead sessions
+        dead = set(self._extended_history) - {a.session_id for a in agents}
+        for sid in dead:
+            self._extended_history.pop(sid, None)
+            self._prev_tool_counts.pop(sid, None)
+            self._pending_deltas.pop(sid, None)
+
+        # --- Update detail + telemetry if visible ---
         if self._detail_mode != "hidden":
             selected = table.get_selected_agent()
             self.query_one("#detail-panel", AgentDetail).show_agent(selected)
+            selected_id = selected.session_id if selected else None
+            self.query_one("#telemetry-panel", TelemetryPanel).update_agents(
+                agents, selected_id, self._extended_history
+            )
 
         # First-permission hint (one-time toast)
         has_perm = any(item.actionable for item in self._action_items)
@@ -718,8 +784,8 @@ class OrchestratorApp(App):
             self.query_one("#detail-panel", AgentDetail).show_agent(event.agent)
 
     def action_toggle_detail(self) -> None:
-        """Cycle detail panel: normal -> expanded -> hidden -> normal."""
-        detail = self.query_one("#detail-panel", AgentDetail)
+        """Cycle right panel: normal -> expanded -> hidden -> normal."""
+        panel = self.query_one("#right-panel", Vertical)
 
         if self._detail_mode == "normal":
             self._detail_mode = "expanded"
@@ -729,24 +795,23 @@ class OrchestratorApp(App):
             self._detail_mode = "normal"
 
         self._detail_visible = self._detail_mode != "hidden"
-        self._apply_detail_mode(detail)
+        self._apply_detail_mode(panel)
 
-    def _apply_detail_mode(self, detail: AgentDetail) -> None:
+    def _apply_detail_mode(self, panel) -> None:
         """Apply CSS classes and content based on current detail mode."""
-        # Reset all mode classes
-        detail.remove_class("expanded", "detail-hidden")
+        panel.remove_class("expanded", "detail-hidden")
 
-        table = self.query_one("#session-list", SessionList)
-        agent = table.get_selected_agent()
+        if self._detail_mode == "expanded":
+            panel.add_class("expanded")
+        elif self._detail_mode == "hidden":
+            panel.add_class("detail-hidden")
 
-        if self._detail_mode == "normal":
-            detail.show_agent(agent)
-        elif self._detail_mode == "expanded":
-            detail.add_class("expanded")
-            detail.show_agent(agent)
+        if self._detail_mode != "hidden":
+            table = self.query_one("#session-list", SessionList)
+            agent = table.get_selected_agent()
+            self.query_one("#detail-panel", AgentDetail).show_agent(agent)
         else:
-            detail.add_class("detail-hidden")
-            detail.show_agent(None)
+            self.query_one("#detail-panel", AgentDetail).show_agent(None)
 
     def action_jump_to_agent(self) -> None:
         """Jump to the selected agent's tmux window."""
