@@ -1,40 +1,95 @@
-#summary-bar {
+/* -- Header & Footer: docked top/bottom -- */
+
+#header-bar {
     height: 1;
-    padding: 0 2;
+    padding: 0 1;
     text-style: bold;
-}
-
-#action-queue {
-    height: auto;
-    max-height: 10;
-    padding: 0 1;
-}
-
-#action-queue.hidden {
-    display: none;
-}
-
-#agent-table {
-    height: 1fr;
-    min-height: 8;
-}
-
-#detail-panel {
-    height: auto;
-    max-height: 12;
-    padding: 0 1;
-    display: none;
-}
-
-#detail-panel.visible {
-    display: block;
+    dock: top;
 }
 
 #context-footer {
     height: 1;
     padding: 0 1;
+    dock: bottom;
 }
 
-DataTable > .datatable--header {
-    text-style: bold;
+/* -- Main area: fills remaining space -- */
+
+#main {
+    height: 1fr;
+}
+
+/* -- Left panel: session list (ListView) -- */
+
+#session-list {
+    width: 2fr;
+    min-width: 40;
+    height: 1fr;
+    min-height: 8;
+    scrollbar-size: 1 1;
+}
+
+#session-list > ListItem.--highlight {
+    background: #3A4A60;
+}
+
+/* -- Right panel: sidebar with detail + actions -- */
+
+#sidebar {
+    width: 1fr;
+    height: 1fr;
+    padding: 0 1;
+}
+
+#detail-panel {
+    height: 1fr;
+    max-height: 16;
+    padding: 0 1;
+    border: solid #2A3040;
+}
+
+#detail-panel.expanded {
+    max-height: 100%;
+}
+
+#detail-panel.detail-hidden {
+    display: none;
+}
+
+#action-panel {
+    height: auto;
+    max-height: 12;
+    padding: 0 1;
+}
+
+#action-panel.hidden {
+    display: none;
+}
+
+#action-panel.detail-expanded {
+    display: none;
+}
+
+/* -- Narrow-mode detail panel (below main, hidden by default) -- */
+
+#narrow-detail {
+    display: none;
+    height: auto;
+    max-height: 10;
+    padding: 0 1;
+    border: solid #2A3040;
+}
+
+/* -- Responsive: narrow mode (<120 cols) -- */
+
+.narrow #sidebar {
+    display: none;
+}
+
+.narrow #session-list {
+    width: 1fr;
+}
+
+.narrow #narrow-detail {
+    display: block;
 }

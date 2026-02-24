@@ -5,16 +5,16 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.events import Key
 from textual.screen import ModalScreen
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.widgets import Input, Label, Static
 
 from clorch.state.manager import StateManager
 from clorch.state.models import AgentState, StatusSummary, ActionItem, build_action_queue
-from clorch.constants import AgentStatus
-from clorch.tui.widgets.agent_table import AgentTable
+from clorch.constants import AgentStatus, ANIM_INTERVAL
+from clorch.tui.widgets.session_list import SessionList
 from clorch.tui.widgets.agent_detail import AgentDetail
-from clorch.tui.widgets.status_bar import StatusBar
-from clorch.tui.widgets.action_queue import ActionQueue
+from clorch.tui.widgets.header_bar import HeaderBar
+from clorch.tui.widgets.action_panel import ActionPanel
 from clorch.tui.widgets.context_footer import ContextFooter
 
 
@@ -108,7 +108,7 @@ class HelpScreen(ModalScreen[None]):
         text.append("  [->]", style=f"bold {CYAN}")
         text.append("      Jump to agent's tmux window\n")
         text.append("  [d]", style=f"bold {CYAN}")
-        text.append("       Toggle detail panel\n\n")
+        text.append("       Cycle detail: normal/expanded/hidden\n\n")
 
         text.append("TMUX MANAGEMENT\n", style=f"bold {YELLOW}")
         text.append("  [N]", style=f"bold {CYAN}")
@@ -156,24 +156,61 @@ class OrchestratorApp(App):
         super().__init__()
         self._manager = StateManager()
         self._prev_states: dict[str, AgentStatus] = {}
-        self._detail_visible = False
+        self._detail_visible = True
+        self._detail_mode = "normal"  # "normal" | "expanded" | "hidden"
         self._focused_action: ActionItem | None = None
         self._action_items: list[ActionItem] = []
         self._has_ever_approved: bool = False
         self._hint_shown: bool = False
+        self._anim_frame: int = 0
+        self._is_narrow: bool = False
+
+    # Responsive breakpoint (columns)
+    NARROW_THRESHOLD = 120
 
     def compose(self) -> ComposeResult:
-        yield StatusBar(id="summary-bar")
-        yield ActionQueue(id="action-queue")
-        yield AgentTable(id="agent-table")
-        yield AgentDetail(id="detail-panel")
+        yield HeaderBar(id="header-bar")
+        with Horizontal(id="main"):
+            yield SessionList(id="session-list")
+            with Vertical(id="sidebar"):
+                yield AgentDetail(id="detail-panel")
+                yield ActionPanel(id="action-panel")
+        yield AgentDetail(id="narrow-detail")
         yield ContextFooter(id="context-footer")
 
     def on_mount(self) -> None:
         self._refresh_timer = self.set_interval(0.5, self._poll_state)
         self._cleanup_timer = self.set_interval(30, self._run_cleanup)
+        self._anim_timer = self.set_interval(ANIM_INTERVAL, self._tick_animation)
         self._run_cleanup()
         self._poll_state()
+        self._apply_tmux_statusbar()
+        self._init_header_tmux()
+        # Initial responsive check
+        self._is_narrow = self.size.width < self.NARROW_THRESHOLD
+        self._apply_responsive_mode()
+
+    def on_resize(self, event) -> None:
+        """Switch between wide/narrow layout based on terminal width."""
+        narrow = self.size.width < self.NARROW_THRESHOLD
+        if narrow != self._is_narrow:
+            self._is_narrow = narrow
+            self._apply_responsive_mode()
+
+    def _apply_responsive_mode(self) -> None:
+        """Toggle CSS classes for wide/narrow layout."""
+        if self._is_narrow:
+            self.add_class("narrow")
+        else:
+            self.remove_class("narrow")
+        # Update the appropriate detail panel
+        if self._detail_mode != "hidden":
+            table = self.query_one("#session-list", SessionList)
+            agent = table.get_selected_agent()
+            if self._is_narrow:
+                self.query_one("#narrow-detail", AgentDetail).show_agent(agent)
+            else:
+                self.query_one("#detail-panel", AgentDetail).show_agent(agent)
 
     def _run_cleanup(self) -> None:
         """Remove stale state files (no activity for 30+ minutes)."""
@@ -181,20 +218,27 @@ class OrchestratorApp(App):
         if removed:
             self.notify(f"Cleaned {removed} stale session(s)")
 
+    def _tick_animation(self) -> None:
+        """Global animation tick — advances spinners and pulses."""
+        self._anim_frame += 1
+        self.query_one("#header-bar", HeaderBar).tick_animation(self._anim_frame)
+        self.query_one("#session-list", SessionList).tick_animation(self._anim_frame)
+
     def _poll_state(self) -> None:
         agents = self._manager.scan()
         summary = StatusSummary.from_agents(agents)
 
-        # Update status bar
-        self.query_one("#summary-bar", StatusBar).update_summary(summary)
+        # Update header bar
+        self.query_one("#header-bar", HeaderBar).update_summary(summary)
 
         # Build action queue
         self._action_items = build_action_queue(agents)
-        self.query_one("#action-queue", ActionQueue).update_actions(self._action_items)
+        self.query_one("#action-panel", ActionPanel).update_actions(self._action_items)
 
-        # Update agent table
-        table = self.query_one("#agent-table", AgentTable)
+        # Update session list (agents + inline action hints)
+        table = self.query_one("#session-list", SessionList)
         table.update_agents(agents)
+        table.update_actions(self._action_items)
 
         # Toast on state changes
         current_states: dict[str, AgentStatus] = {}
@@ -211,9 +255,12 @@ class OrchestratorApp(App):
         self._prev_states = current_states
 
         # Update detail if visible
-        if self._detail_visible:
+        if self._detail_mode != "hidden":
             selected = table.get_selected_agent()
-            self.query_one("#detail-panel", AgentDetail).show_agent(selected)
+            if self._is_narrow:
+                self.query_one("#narrow-detail", AgentDetail).show_agent(selected)
+            else:
+                self.query_one("#detail-panel", AgentDetail).show_agent(selected)
 
         # First-permission hint (one-time toast)
         has_perm = any(item.actionable for item in self._action_items)
@@ -307,13 +354,14 @@ class OrchestratorApp(App):
 
         # a-z: select action by letter
         if len(key) == 1 and "a" <= key <= "z":
-            action_queue = self.query_one("#action-queue", ActionQueue)
-            action = action_queue.get_action(key)
+            action_panel = self.query_one("#action-panel", ActionPanel)
+            action = action_panel.get_action(key)
             if action:
                 if action.actionable:
                     # PERM: focus the action for y/n
                     self._focused_action = action
-                    action_queue.set_focus(key)
+                    action_panel.set_focus(key)
+                    self.query_one("#session-list", SessionList).set_action_focus(key)
                     self._update_footer_mode()
                     name = action.agent.project_name or action.agent.session_id[:12]
                     self.notify(f"Selected [{key}] {name} — press [y] approve / [n] deny")
@@ -337,7 +385,8 @@ class OrchestratorApp(App):
     def _clear_focused_action(self) -> None:
         """Clear the focused action and reset footer/queue state."""
         self._focused_action = None
-        self.query_one("#action-queue", ActionQueue).clear_focus()
+        self.query_one("#action-panel", ActionPanel).clear_focus()
+        self.query_one("#session-list", SessionList).clear_action_focus()
         self._update_footer_mode()
 
     # ------------------------------------------------------------------
@@ -395,7 +444,7 @@ class OrchestratorApp(App):
         if tmux.is_available() and tmux.exists():
             window = map_agent_to_window(agent, tmux)
             if window:
-                target = tmux.get_pane_target(window)
+                target = tmux.get_pane_target(window, agent.tmux_pane or "0")
                 tmux.send_keys(target, key, literal=True)
                 tmux.send_keys(target, "Enter")
                 return True
@@ -429,15 +478,16 @@ class OrchestratorApp(App):
 
     def _select_agent_by_number(self, num: int) -> None:
         """Select an agent by number key and optionally jump to its session."""
-        table = self.query_one("#agent-table", AgentTable)
+        table = self.query_one("#session-list", SessionList)
         agent = table.get_agent_by_number(num)
         if agent:
             # Move cursor to that row
             idx = num - 1 if num != 0 else 9
             if 0 <= idx < len(table._agents):
                 table.move_cursor(row=idx)
-            self._detail_visible = True
-            self.query_one("#detail-panel", AgentDetail).show_agent(agent)
+            if self._detail_mode != "hidden":
+                detail_id = "#narrow-detail" if self._is_narrow else "#detail-panel"
+                self.query_one(detail_id, AgentDetail).show_agent(agent)
 
     def _jump_to_session(self, agent: AgentState) -> None:
         """Jump to an agent's tmux window or iTerm tab."""
@@ -479,6 +529,21 @@ class OrchestratorApp(App):
                 return
 
         self.notify(f"No window/tab found for {name}", severity="warning")
+
+    def _apply_tmux_statusbar(self) -> None:
+        """Apply clorch status bar options to an existing tmux session."""
+        from clorch.tmux.session import TmuxSession
+        tmux = TmuxSession()
+        if tmux.is_available() and tmux.exists():
+            tmux._apply_options()
+            tmux._apply_keybindings()
+
+    def _init_header_tmux(self) -> None:
+        """Set the tmux session name in the header bar."""
+        from clorch.tmux.session import TmuxSession
+        tmux = TmuxSession()
+        if tmux.is_available() and tmux.exists():
+            self.query_one("#header-bar", HeaderBar).set_tmux_session(tmux.session)
 
     # ------------------------------------------------------------------
     # Tmux window / pane management
@@ -598,7 +663,7 @@ class OrchestratorApp(App):
         if not tmux:
             return
 
-        table = self.query_one("#agent-table", AgentTable)
+        table = self.query_one("#session-list", SessionList)
         agent = table.get_selected_agent()
         if not agent:
             self.notify("No agent selected", severity="warning")
@@ -622,7 +687,7 @@ class OrchestratorApp(App):
         if not tmux:
             return
 
-        table = self.query_one("#agent-table", AgentTable)
+        table = self.query_one("#session-list", SessionList)
         agent = table.get_selected_agent()
         if not agent:
             self.notify("No agent selected", severity="warning")
@@ -649,7 +714,7 @@ class OrchestratorApp(App):
         if not tmux:
             return
 
-        table = self.query_one("#agent-table", AgentTable)
+        table = self.query_one("#session-list", SessionList)
         agent = table.get_selected_agent()
         if not agent:
             self.notify("No agent selected", severity="warning")
@@ -669,25 +734,63 @@ class OrchestratorApp(App):
     # Standard actions
     # ------------------------------------------------------------------
 
-    def on_data_table_row_selected(self, event) -> None:
-        table = self.query_one("#agent-table", AgentTable)
-        agent = table.get_selected_agent()
-        if agent:
-            self._detail_visible = True
-            self.query_one("#detail-panel", AgentDetail).show_agent(agent)
+    def on_session_list_agent_highlighted(self, event: SessionList.AgentHighlighted) -> None:
+        """Update detail panel when cursor moves to a new agent."""
+        if self._detail_mode != "hidden":
+            if self._is_narrow:
+                self.query_one("#narrow-detail", AgentDetail).show_agent(event.agent)
+            else:
+                self.query_one("#detail-panel", AgentDetail).show_agent(event.agent)
 
     def action_toggle_detail(self) -> None:
-        self._detail_visible = not self._detail_visible
+        """Cycle detail panel: normal -> expanded -> hidden -> normal."""
         detail = self.query_one("#detail-panel", AgentDetail)
-        if self._detail_visible:
-            table = self.query_one("#agent-table", AgentTable)
-            detail.show_agent(table.get_selected_agent())
+        action_panel = self.query_one("#action-panel", ActionPanel)
+
+        if self._detail_mode == "normal":
+            self._detail_mode = "expanded"
+        elif self._detail_mode == "expanded":
+            self._detail_mode = "hidden"
         else:
+            self._detail_mode = "normal"
+
+        self._detail_visible = self._detail_mode != "hidden"
+        self._apply_detail_mode(detail, action_panel)
+
+    def _apply_detail_mode(self, detail: AgentDetail, action_panel: ActionPanel) -> None:
+        """Apply CSS classes and content based on current detail mode."""
+        narrow_detail = self.query_one("#narrow-detail", AgentDetail)
+
+        # Reset all mode classes
+        detail.remove_class("expanded", "detail-hidden")
+        action_panel.remove_class("detail-expanded")
+
+        table = self.query_one("#session-list", SessionList)
+        agent = table.get_selected_agent()
+
+        if self._detail_mode == "normal":
+            # Both visible, detail has max-height cap
+            if self._is_narrow:
+                narrow_detail.show_agent(agent)
+            else:
+                detail.show_agent(agent)
+        elif self._detail_mode == "expanded":
+            # Detail takes full sidebar, action panel hidden
+            detail.add_class("expanded")
+            action_panel.add_class("detail-expanded")
+            if self._is_narrow:
+                narrow_detail.show_agent(agent)
+            else:
+                detail.show_agent(agent)
+        else:
+            # Hidden — detail gone, action panel takes full sidebar
+            detail.add_class("detail-hidden")
             detail.show_agent(None)
+            narrow_detail.show_agent(None)
 
     def action_jump_to_agent(self) -> None:
         """Jump to the selected agent's tmux window."""
-        table = self.query_one("#agent-table", AgentTable)
+        table = self.query_one("#session-list", SessionList)
         agent = table.get_selected_agent()
         if agent:
             self._jump_to_session(agent)
@@ -697,10 +800,10 @@ class OrchestratorApp(App):
         self.notify("Refreshed")
 
     def action_cursor_down(self) -> None:
-        self.query_one("#agent-table", AgentTable).action_cursor_down()
+        self.query_one("#session-list", SessionList).action_cursor_down()
 
     def action_cursor_up(self) -> None:
-        self.query_one("#agent-table", AgentTable).action_cursor_up()
+        self.query_one("#session-list", SessionList).action_cursor_up()
 
 
 def run_dashboard() -> None:

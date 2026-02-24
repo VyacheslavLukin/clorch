@@ -19,7 +19,7 @@ class ContextFooter(Static):
     DEFAULT_CSS = """
     ContextFooter {
         height: 1;
-        color: #555555;
+        color: #666666;
         padding: 0 1;
     }
     """

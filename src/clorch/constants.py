@@ -17,11 +17,11 @@ class AgentStatus(str, Enum):
 
 # Display mapping: symbol, label, hex color
 STATUS_DISPLAY: dict[AgentStatus, tuple[str, str, str]] = {
-    AgentStatus.WORKING:            (">>>", "WORK", "#00FF88"),
-    AgentStatus.IDLE:               ("---", "IDLE", "#555555"),
-    AgentStatus.WAITING_PERMISSION: ("[!]", "PERM", "#FF0040"),
-    AgentStatus.WAITING_ANSWER:     ("[?]", "ASK",  "#FFB800"),
-    AgentStatus.ERROR:              ("[X]", "ERR",  "#FF0080"),
+    AgentStatus.WORKING:            (">>>", "WORK", "#5AE0A0"),
+    AgentStatus.IDLE:               ("---", "IDLE", "#666666"),
+    AgentStatus.WAITING_PERMISSION: ("[!]", "PERM", "#E05070"),
+    AgentStatus.WAITING_ANSWER:     ("[?]", "ASK",  "#D4A850"),
+    AgentStatus.ERROR:              ("[X]", "ERR",  "#D060A0"),
 }
 
 # Statuses that need user attention (used by "jump to next red")
@@ -31,16 +31,19 @@ ATTENTION_STATUSES = frozenset({
     AgentStatus.ERROR,
 })
 
-# Cyberpunk theme palette
+# Muted cyberpunk theme palette
 THEME = {
-    "bg":      "#0A0E1A",
-    "green":   "#00FF88",
-    "cyan":    "#00BFFF",
-    "pink":    "#FF0080",
-    "red":     "#FF0040",
-    "yellow":  "#FFB800",
-    "grey":    "#555555",
-    "fg":      "#C0C0C0",
+    "bg":      "#0C1018",
+    "green":   "#5AE0A0",
+    "cyan":    "#5EAFD0",
+    "pink":    "#D060A0",
+    "red":     "#E05070",
+    "yellow":  "#D4A850",
+    "grey":    "#666666",
+    "fg":      "#C8CCD0",
+    "dim":     "#4A5060",
+    "border":  "#2A3040",
+    "accent":  "#3A4A60",
     "bright":  "#FFFFFF",
 }
 
@@ -51,9 +54,18 @@ PINK   = THEME["pink"]
 RED    = THEME["red"]
 YELLOW = THEME["yellow"]
 GREY   = THEME["grey"]
+DIM    = THEME["dim"]
+BORDER = THEME["border"]
+ACCENT = THEME["accent"]
 
 # Activity history length (sparkline points)
 ACTIVITY_HISTORY_LEN = 10
 
 # Sparkline characters (8 levels)
 SPARKLINE_CHARS = "▁▂▃▄▅▆▇█"
+
+# Braille spinner frames for WORKING status animation
+BRAILLE_SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+# Global animation tick interval (seconds)
+ANIM_INTERVAL = 0.25
