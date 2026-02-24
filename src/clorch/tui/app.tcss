@@ -1,11 +1,19 @@
-/* -- Header & Footer: docked top/bottom -- */
+/* -- Nord Aurora theme — lazydocker-style bordered panels -- */
+
+Screen {
+    background: #2E3440;
+}
+
+/* -- Header: docked top, no border -- */
 
 #header-bar {
-    height: 1;
-    padding: 0 1;
+    height: 3;
+    padding: 1 1;
     text-style: bold;
     dock: top;
 }
+
+/* -- Footer: docked bottom, no border -- */
 
 #context-footer {
     height: 1;
@@ -13,31 +21,64 @@
     dock: bottom;
 }
 
-/* -- Session list: fills remaining space -- */
+/* -- Main split: list left, detail right -- */
+
+#main-split {
+    height: 1fr;
+}
+
+/* -- List pane: bordered panel with title -- */
+
+#list-pane {
+    width: 2fr;
+    height: 1fr;
+    border: round #4C566A;
+    border-title-color: #88C0D0;
+    border-title-style: bold;
+    padding: 0;
+}
+
+#list-pane:focus-within {
+    border: round #88C0D0;
+}
+
+/* -- Column header inside list pane -- */
+
+#list-header {
+    height: 1;
+    padding: 0 1;
+}
+
+/* -- Session list -- */
 
 #session-list {
-    width: 1fr;
     height: 1fr;
-    min-height: 8;
+    min-height: 4;
     scrollbar-size: 1 1;
+    background: #2E3440;
 }
 
 #session-list > ListItem.--highlight {
-    background: #3A4A60;
+    background: #4C566A;
 }
 
-/* -- Detail panel: docked to bottom -- */
+/* -- Detail panel: bordered panel with title -- */
 
 #detail-panel {
-    dock: bottom;
-    height: auto;
-    max-height: 10;
+    width: 1fr;
+    height: 1fr;
+    border: round #4C566A;
+    border-title-color: #88C0D0;
+    border-title-style: bold;
     padding: 0 1;
-    border: solid #2A3040;
+}
+
+#detail-panel:focus-within {
+    border: round #88C0D0;
 }
 
 #detail-panel.expanded {
-    max-height: 100%;
+    width: 2fr;
 }
 
 #detail-panel.detail-hidden {

@@ -5,13 +5,13 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.events import Key
 from textual.screen import ModalScreen
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.widgets import Input, Label, Static
 
 from clorch.state.manager import StateManager
 from clorch.state.models import AgentState, StatusSummary, ActionItem, build_action_queue
 from clorch.constants import AgentStatus, ANIM_INTERVAL
-from clorch.tui.widgets.session_list import SessionList
+from clorch.tui.widgets.session_list import SessionList, ListHeader
 from clorch.tui.widgets.agent_detail import AgentDetail
 from clorch.tui.widgets.header_bar import HeaderBar
 from clorch.tui.widgets.context_footer import ContextFooter
@@ -165,8 +165,14 @@ class OrchestratorApp(App):
 
     def compose(self) -> ComposeResult:
         yield HeaderBar(id="header-bar")
-        yield SessionList(id="session-list")
-        yield AgentDetail(id="detail-panel")
+        with Horizontal(id="main-split"):
+            with Vertical(id="list-pane") as lp:
+                lp.border_title = "Agents"
+                yield ListHeader(id="list-header")
+                yield SessionList(id="session-list")
+            detail = AgentDetail(id="detail-panel")
+            detail.border_title = "Detail"
+            yield detail
         yield ContextFooter(id="context-footer")
 
     def on_mount(self) -> None:

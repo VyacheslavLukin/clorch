@@ -17,11 +17,11 @@ class AgentStatus(str, Enum):
 
 # Display mapping: symbol, label, hex color
 STATUS_DISPLAY: dict[AgentStatus, tuple[str, str, str]] = {
-    AgentStatus.WORKING:            (">>>", "WORK", "#5AE0A0"),
-    AgentStatus.IDLE:               ("---", "IDLE", "#666666"),
-    AgentStatus.WAITING_PERMISSION: ("[!]", "PERM", "#E05070"),
-    AgentStatus.WAITING_ANSWER:     ("[?]", "WAIT", "#D4A850"),
-    AgentStatus.ERROR:              ("[X]", "ERR",  "#D060A0"),
+    AgentStatus.WORKING:            (">>>", "WORK", "#A3BE8C"),
+    AgentStatus.IDLE:               ("---", "IDLE", "#616E88"),
+    AgentStatus.WAITING_PERMISSION: ("[!]", "PERM", "#BF616A"),
+    AgentStatus.WAITING_ANSWER:     ("[?]", "WAIT", "#EBCB8B"),
+    AgentStatus.ERROR:              ("[X]", "ERR",  "#B48EAD"),
 }
 
 # Statuses that need user attention (used by "jump to next red")
@@ -31,20 +31,20 @@ ATTENTION_STATUSES = frozenset({
     AgentStatus.ERROR,
 })
 
-# Muted cyberpunk theme palette
+# Nord Aurora theme palette
 THEME = {
-    "bg":      "#0C1018",
-    "green":   "#5AE0A0",
-    "cyan":    "#5EAFD0",
-    "pink":    "#D060A0",
-    "red":     "#E05070",
-    "yellow":  "#D4A850",
-    "grey":    "#666666",
-    "fg":      "#C8CCD0",
-    "dim":     "#4A5060",
-    "border":  "#2A3040",
-    "accent":  "#3A4A60",
-    "bright":  "#FFFFFF",
+    "bg":      "#2E3440",
+    "green":   "#A3BE8C",
+    "cyan":    "#88C0D0",
+    "pink":    "#B48EAD",
+    "red":     "#BF616A",
+    "yellow":  "#EBCB8B",
+    "grey":    "#616E88",
+    "fg":      "#D8DEE9",
+    "dim":     "#4C566A",
+    "border":  "#3B4252",
+    "accent":  "#434C5E",
+    "bright":  "#ECEFF4",
 }
 
 # Convenience aliases — single source of truth for TUI and tmux colours.

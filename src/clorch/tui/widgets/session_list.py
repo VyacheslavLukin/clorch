@@ -13,6 +13,30 @@ from clorch.constants import (
 )
 
 
+class ListHeader(Static):
+    """Column header row matching SessionRow column widths."""
+
+    def on_mount(self) -> None:
+        text = Text()
+        # Col 1: accent (2) + Col 2: num (3) + separator (1) = 6 chars
+        text.append("      ", style="dim")
+        # Col 3: project name (22)
+        text.append(f"{'NAME':<22s}", style=f"dim {GREY}")
+        # Col 4: status (1 space + 8)
+        text.append(f" {'STATUS':<8s}", style=f"dim {GREY}")
+        # Col 5: tool (1 space + 12)
+        text.append(f" {'TOOL':<12s}", style=f"dim {GREY}")
+        # Col 6: tool count (4)
+        text.append(f"{'#T':>4s}", style=f"dim {GREY}")
+        # Col 7: error count (3)
+        text.append(f"{'#E':>3s}", style=f"dim {GREY}")
+        # Col 8: uptime (8)
+        text.append(f"{'UPTIME':>8s}", style=f"dim {GREY}")
+        # Col 9: sparkline (2 space + 10)
+        text.append(f"  {'ACTIVITY':<10s}", style=f"dim {GREY}")
+        self.update(text)
+
+
 class SessionRow(ListItem):
     """A single agent row in the session list.
 
@@ -206,9 +230,6 @@ class SessionList(ListView):
         height: 1fr;
         min-height: 8;
         scrollbar-size: 1 1;
-    }
-    SessionList > ListItem.--highlight {
-        background: #3A4A60;
     }
     """
 

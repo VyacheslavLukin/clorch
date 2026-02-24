@@ -91,9 +91,7 @@ class AgentDetail(Static):
 
         text = Text()
 
-        # Title line
-        text.append("DETAIL", style=f"bold {CYAN}")
-        text.append("  ", style="dim")
+        # Project name
         text.append(agent.project_name or agent.session_id[:12], style="bold white")
         text.append("\n")
 
