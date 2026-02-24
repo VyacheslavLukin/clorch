@@ -76,13 +76,16 @@ fi
 # TMUX is set when running inside a tmux pane — detect the window name.
 CWD_FROM_INPUT="$(echo "$INPUT_JSON" | jq -r '.cwd // empty')"
 TMUX_WINDOW=""
-# Detect tmux window ONLY if Claude Code's tty is actually inside a tmux pane.
+TMUX_PANE=""
+# Detect tmux window AND pane ONLY if Claude Code's tty is actually inside a tmux pane.
 # Plain `tmux display-message` returns whatever the last client sees, which is
 # wrong when the agent runs in an iTerm tab while a tmux server is up.
 _CLAUDE_TTY="$(ps -p "$PPID" -o tty= 2>/dev/null | tr -d ' ')"
 if [[ -n "$_CLAUDE_TTY" && "$_CLAUDE_TTY" != "??" ]]; then
-    TMUX_WINDOW="$(tmux list-panes -a -F '#{pane_tty} #{window_name}' 2>/dev/null \
-        | awk -v tty="/dev/$_CLAUDE_TTY" '$1 == tty { print $2; exit }')"
+    _TMUX_INFO="$(tmux list-panes -a -F '#{pane_tty} #{window_name} #{pane_index}' 2>/dev/null \
+        | awk -v tty="/dev/$_CLAUDE_TTY" '$1 == tty { print $2, $3; exit }')"
+    TMUX_WINDOW="${_TMUX_INFO%% *}"
+    TMUX_PANE="${_TMUX_INFO##* }"
 fi
 CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     --arg sid "$SESSION_ID" \
@@ -90,6 +93,7 @@ CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     --arg now "$NOW" \
     --argjson pid "$PPID" \
     --arg tmux_win "${TMUX_WINDOW:-}" \
+    --arg tmux_pane "${TMUX_PANE:-}" \
     '
     if .session_id == null or .session_id == "" then .session_id = $sid else . end |
     if (.cwd == null or .cwd == "") and $cwd != "" then .cwd = $cwd else . end |
@@ -99,7 +103,8 @@ CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     if .error_count == null then .error_count = 0 else . end |
     if .activity_history == null then .activity_history = [0,0,0,0,0,0,0,0,0,0] else . end |
     .pid = $pid |
-    .tmux_window = $tmux_win
+    .tmux_window = $tmux_win |
+    .tmux_pane = $tmux_pane
     '
 )"
 
@@ -122,6 +127,9 @@ case "$EVENT" in
             --arg model "$MODEL" \
             --arg last_event "SessionStart" \
             --arg last_event_time "$NOW" \
+            --argjson pid "$PPID" \
+            --arg tmux_win "${TMUX_WINDOW:-}" \
+            --arg tmux_pane "${TMUX_PANE:-}" \
             '{
                 session_id: $sid,
                 status: $status,
@@ -134,7 +142,10 @@ case "$EVENT" in
                 last_tool: null,
                 tool_count: 0,
                 error_count: 0,
-                activity_history: [0,0,0,0,0,0,0,0,0,0]
+                activity_history: [0,0,0,0,0,0,0,0,0,0],
+                pid: $pid,
+                tmux_window: $tmux_win,
+                tmux_pane: $tmux_pane
             }' > "$TEMP_FILE"
         mv "$TEMP_FILE" "$STATE_FILE"
         ;;
@@ -152,6 +163,7 @@ case "$EVENT" in
             .last_tool = $tool |
             .last_event = $last_event |
             .last_event_time = $last_event_time |
+            .notification_message = null |
             .tool_count = ((.tool_count // 0) + 1) |
             .activity_history = (
                 (.activity_history // [0,0,0,0,0,0,0,0,0,0]) |
@@ -169,7 +181,8 @@ case "$EVENT" in
             '
             .status = $status |
             .last_event = $last_event |
-            .last_event_time = $last_event_time
+            .last_event_time = $last_event_time |
+            .notification_message = null
             ' > "$TEMP_FILE"
         mv "$TEMP_FILE" "$STATE_FILE"
         ;;
@@ -189,8 +202,18 @@ case "$EVENT" in
         ;;
 
     Stop)
+        # Don't downgrade WAITING_ANSWER / WAITING_PERMISSION to IDLE —
+        # the Notification / PermissionRequest handler already set the
+        # correct attention status and Stop fires *after* them.
+        CURRENT_STATUS="$(echo "$CURRENT_STATE" | jq -r '.status // "IDLE"')"
+        if [[ "$CURRENT_STATUS" == "WAITING_ANSWER" || "$CURRENT_STATUS" == "WAITING_PERMISSION" ]]; then
+            STOP_STATUS="$CURRENT_STATUS"
+        else
+            STOP_STATUS="IDLE"
+        fi
+
         echo "$CURRENT_STATE" | jq \
-            --arg status "IDLE" \
+            --arg status "$STOP_STATUS" \
             --arg last_event "Stop" \
             --arg last_event_time "$NOW" \
             '
@@ -226,7 +249,8 @@ case "$EVENT" in
             '
             .status = $status |
             .last_event = $last_event |
-            .last_event_time = $last_event_time
+            .last_event_time = $last_event_time |
+            .notification_message = null
             ' > "$TEMP_FILE"
         mv "$TEMP_FILE" "$STATE_FILE"
         ;;
