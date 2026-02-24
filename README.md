@@ -64,18 +64,6 @@ clorch --version    Print version
 | `Y` | Approve **all** pending permissions |
 | `?` | Help overlay |
 
-## tmux Status Bar
-
-Add to `~/.tmux.conf`:
-
-```bash
-set -g status-right '#(clorch tmux-widget)'
-set -g status-interval 2
-
-# Jump to the next agent needing attention
-bind-key ! run-shell "python -m clorch.tmux.navigator"
-```
-
 ## How It Works
 
 ```
