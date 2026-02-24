@@ -55,34 +55,14 @@ clorch --version    Print version
 
 ## TUI Keybindings
 
-### Navigation
-
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Move selection up / down |
-| `1`–`0` | Jump to agent by row number |
-| `Enter` / `Right` | Jump to selected agent's session |
-| `d` | Toggle detail panel |
-| `r` | Refresh |
-| `?` | Help overlay |
-| `q` | Quit |
-
-### Action Queue
-
-| Key | Action |
-|-----|--------|
+| `→` | Jump to selected agent's session |
 | `a`–`z` | Focus an action item |
 | `y` / `n` | Approve / deny focused permission |
 | `Y` | Approve **all** pending permissions |
-| `Esc` | Cancel selection |
-
-### tmux
-
-| Key | Action |
-|-----|--------|
-| `N` | Create a new tmux window (prompts for name) |
-| `S` / `V` | Split selected agent's window (horizontal / vertical) |
-| `X` | Kill selected agent's tmux window |
+| `?` | Help overlay |
 
 ## tmux Status Bar
 
