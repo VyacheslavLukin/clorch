@@ -94,6 +94,36 @@ class TmuxSession:
             })
         return windows
 
+    def list_panes(self) -> list[dict[str, str]]:
+        """List all panes across all windows in the session.
+
+        Returns a list of dicts with keys:
+        ``window_name``, ``window_index``, ``pane_path``, ``pane_index``.
+        """
+        fmt = "#{window_name}\t#{window_index}\t#{pane_current_path}\t#{pane_index}"
+        result = self.run_command(
+            "list-panes",
+            "-s",
+            "-t", self.session,
+            "-F", fmt,
+            check=False,
+        )
+        if result.returncode != 0:
+            return []
+
+        panes: list[dict[str, str]] = []
+        for line in result.stdout.strip().splitlines():
+            parts = line.split("\t")
+            if len(parts) < 4:
+                continue
+            panes.append({
+                "window_name": parts[0],
+                "window_index": parts[1],
+                "pane_path": parts[2],
+                "pane_index": parts[3],
+            })
+        return panes
+
     def select_window(self, window: str) -> None:
         """Switch the active tmux window.
 

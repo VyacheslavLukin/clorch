@@ -45,12 +45,12 @@ def map_agent_to_window(agent: AgentState, tmux: TmuxSession) -> str | None:
             if win["name"].lower() == project_lower:
                 return win["name"]
 
-    # 3. Match by cwd == pane current path
+    # 3. Match by cwd across ALL panes (not just the active one per window)
     if agent.cwd:
         agent_cwd = _normalise_path(agent.cwd)
-        for win in windows:
-            if _normalise_path(win["pane_path"]) == agent_cwd:
-                return win["name"]
+        for pane in tmux.list_panes():
+            if _normalise_path(pane["pane_path"]) == agent_cwd:
+                return pane["window_name"]
 
     return None
 
@@ -92,26 +92,32 @@ def jump_to_tmux_iterm_tab(tmux: TmuxSession, window: str) -> bool:
 def jump_to_iterm_tab(agent: AgentState) -> bool:
     """Switch iTerm2 to the tab running the agent's session.
 
-    Uses a two-step approach:
-    1. AppleScript to get each iTerm session's ``tty``.
-    2. ``lsof`` to resolve the foreground process's cwd from that tty.
-    3. Match cwd against ``agent.cwd``.
-
-    Falls back to matching ``agent.project_name`` in the tab title.
+    Strategy order (most precise first):
+    1. PID → tty → iTerm tab (unique match even for same-cwd sessions).
+    2. cwd → tty → iTerm tab (fallback when PID is unavailable).
+    3. project_name in tab title (last resort).
 
     Returns ``True`` on success, ``False`` if no matching tab was found.
     """
-    # Strategy 1: match by cwd via tty → lsof
-    if agent.cwd:
+    tty_map = _iterm_get_tty_map()
+
+    # Strategy 1: match by PID → tty (most precise)
+    if agent.pid and tty_map:
+        agent_tty = _tty_from_pid(agent.pid)
+        if agent_tty and agent_tty in tty_map:
+            if _iterm_activate_tab(tty_map[agent_tty]):
+                return True
+
+    # Strategy 2: match by cwd via tty → lsof
+    if agent.cwd and tty_map:
         target_cwd = _normalise_path(agent.cwd)
-        tty_map = _iterm_get_tty_map()
         for tty, tab_ref in tty_map.items():
             cwd = _cwd_from_tty(tty)
             if cwd and _normalise_path(cwd) == target_cwd:
                 if _iterm_activate_tab(tab_ref):
                     return True
 
-    # Strategy 2: match by project name in tab title
+    # Strategy 3: match by project name in tab title
     if agent.project_name:
         if _iterm_activate_by_name(agent.project_name):
             return True
@@ -154,6 +160,23 @@ def _iterm_get_tty_map() -> dict[str, str]:
         tty, ref = line.split("=", 1)
         result[tty] = ref
     return result
+
+
+def _tty_from_pid(pid: int) -> str | None:
+    """Get the controlling terminal of a process by PID."""
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "tty="],
+            capture_output=True, text=True, timeout=3,
+        )
+        tty = result.stdout.strip()
+        if tty and tty != "??":
+            if not tty.startswith("/dev/"):
+                tty = f"/dev/{tty}"
+            return tty
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        log.debug("Failed to get tty for pid %d: %s", pid, exc)
+    return None
 
 
 def _cwd_from_tty(tty: str) -> str | None:

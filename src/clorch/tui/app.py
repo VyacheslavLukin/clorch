@@ -449,22 +449,34 @@ class OrchestratorApp(App):
         name = agent.project_name or agent.session_id[:12]
 
         tmux = TmuxSession()
-        if tmux.is_available() and tmux.exists():
+        has_tmux = tmux.is_available() and tmux.exists()
+
+        # Agent explicitly in tmux → tmux path first
+        if agent.tmux_window and has_tmux:
             window = map_agent_to_window(agent, tmux)
             if window:
-                # Try iTerm tab switching (linked sessions)
                 if jump_to_tmux_iterm_tab(tmux, window):
                     self.notify(f"Jumped to {name}")
                     return
-                # Raw tmux (no iTerm): select window directly
                 tmux.select_window(window)
                 self.notify(f"Jumped to {name}")
                 return
 
-        # No tmux match — try plain iTerm tab matching (cwd/name)
+        # Plain iTerm tab matching (cwd/name)
         if jump_to_iterm_tab(agent):
             self.notify(f"Jumped to {name}")
             return
+
+        # Fallback: try tmux matching by cwd/name even without explicit tmux_window
+        if has_tmux and not agent.tmux_window:
+            window = map_agent_to_window(agent, tmux)
+            if window:
+                if jump_to_tmux_iterm_tab(tmux, window):
+                    self.notify(f"Jumped to {name}")
+                    return
+                tmux.select_window(window)
+                self.notify(f"Jumped to {name}")
+                return
 
         self.notify(f"No window/tab found for {name}", severity="warning")
 
@@ -522,6 +534,7 @@ class OrchestratorApp(App):
             f"do sleep 1; done; "
             f"tmux kill-window -t {q_session}:{q_window} 2>/dev/null) & "
             f"tmux kill-session -t {q_linked} 2>/dev/null; "
+            f"sleep 0.2; "
             f"exec tmux new-session -t {q_session} -s {q_linked} "
             f"\\; select-window -t :{q_window} "
             f"\\; set-option destroy-unattached on"

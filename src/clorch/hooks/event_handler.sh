@@ -76,9 +76,8 @@ fi
 # TMUX is set when running inside a tmux pane — detect the window name.
 CWD_FROM_INPUT="$(echo "$INPUT_JSON" | jq -r '.cwd // empty')"
 TMUX_WINDOW=""
-if [[ -n "${TMUX:-}" ]]; then
-    TMUX_WINDOW="$(tmux display-message -p '#{window_name}' 2>/dev/null || true)"
-fi
+# Try to detect tmux window — $TMUX may not be propagated by Claude Code
+TMUX_WINDOW="$(tmux display-message -p '#{window_name}' 2>/dev/null || true)"
 CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     --arg sid "$SESSION_ID" \
     --arg cwd "${CWD_FROM_INPUT:-}" \
