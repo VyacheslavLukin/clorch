@@ -93,14 +93,17 @@ Clorch does not read, modify, or access your project files. Here's what it touch
 
 ## Platform Support
 
-| Feature | macOS + iTerm2 | macOS + Terminal | Linux |
-|---------|:-:|:-:|:-:|
-| Dashboard & approve/deny | yes | yes | yes |
-| Jump to agent (tmux) | yes | yes | yes |
-| Jump to agent (iTerm tab) | yes | — | — |
-| Native notifications | yes | yes | — |
-| Terminal bell | yes | yes | yes |
-| tmux status-bar widget | yes | yes | yes |
+| Feature | macOS + iTerm2 | macOS + Ghostty | macOS + Terminal | Linux |
+|---------|:-:|:-:|:-:|:-:|
+| Dashboard & approve/deny | yes | yes | yes | yes |
+| Jump to agent (tmux) | yes | yes | yes | yes |
+| Jump to agent (native tab) | yes | — | — | — |
+| Open tmux window as tab | yes | yes* | — | — |
+| Native notifications | yes | yes | yes | — |
+| Terminal bell | yes | yes | yes | yes |
+| tmux status-bar widget | yes | yes | yes | yes |
+
+\* Ghostty tab creation requires Accessibility permission for `osascript`. Without it, a new Ghostty window is opened instead.
 
 ## Configuration
 
@@ -108,6 +111,7 @@ Clorch does not read, modify, or access your project files. Here's what it touch
 |----------|---------|-------------|
 | `CLORCH_STATE_DIR` | `/tmp/clorch/state` | Directory for agent state files |
 | `CLORCH_SESSION` | `claude` | tmux session name |
+| `CLORCH_TERMINAL` | auto-detect | Force terminal backend: `iterm`, `ghostty`, `apple_terminal` |
 
 ## Development
 
