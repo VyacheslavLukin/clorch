@@ -13,7 +13,7 @@ class EventLog(RichLog):
     """Scrolling event log with colored entries."""
 
     def __init__(self, **kwargs) -> None:
-        super().__init__(max_lines=200, auto_scroll=True, markup=False, **kwargs)
+        super().__init__(max_lines=200, auto_scroll=True, markup=False, wrap=True, **kwargs)
 
     def write_event(
         self,

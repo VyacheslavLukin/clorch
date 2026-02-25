@@ -104,4 +104,6 @@ Screen {
     border-title-style: bold;
     padding: 0 1;
     background: #2E3440;
+    scrollbar-size-horizontal: 0;
+    scrollbar-size-vertical: 0;
 }

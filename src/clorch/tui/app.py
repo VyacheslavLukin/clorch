@@ -115,7 +115,7 @@ class HelpScreen(ModalScreen[None]):
         text.append("  [N]", style=f"bold {CYAN}")
         text.append("       Create new tmux window\n")
         text.append("  [R]", style=f"bold {CYAN}")
-        text.append("       Open iTerm tab for selected agent\n")
+        text.append("       Open terminal tab for selected agent\n")
         text.append("  [X]", style=f"bold {CYAN}")
         text.append("       Kill selected agent's window\n")
         text.append("  [S/V]", style=f"bold {CYAN}")
@@ -472,9 +472,9 @@ class OrchestratorApp(App):
 
         Only uses tmux send-keys when the agent actually lives in a tmux
         pane (``tmux_window`` is set by the hook).  Falls back to jumping
-        to the iTerm tab so the user can approve/deny manually.
+        to the terminal tab so the user can approve/deny manually.
         """
-        from clorch.tmux.navigator import map_agent_to_window, jump_to_iterm_tab
+        from clorch.tmux.navigator import map_agent_to_window, jump_to_tab
         from clorch.tmux.session import TmuxSession
 
         name = agent.project_name or agent.session_id[:12]
@@ -493,8 +493,8 @@ class OrchestratorApp(App):
                     return True
                 self.notify(f"tmux send-keys failed for {name}", severity="warning")
 
-        # Agent is not in tmux — switch to its iTerm tab
-        if jump_to_iterm_tab(agent):
+        # Agent is not in tmux — switch to its terminal tab
+        if jump_to_tab(agent):
             action = "approve" if key == "y" else "deny"
             self.notify(f"Switched to {name} — please {action} manually", severity="information")
             return True
@@ -537,14 +537,14 @@ class OrchestratorApp(App):
 
         Two paths depending on how the agent is running:
         - **tmux**: ``select-window`` + ``select-pane`` (CC mode
-          auto-switches the iTerm tab), then bring iTerm to front.
-        - **plain iTerm**: PID → tty → iTerm tab activation.
+          auto-switches the terminal tab), then bring terminal to front.
+        - **plain terminal**: PID → tty → terminal tab activation.
 
         Dead processes are cleaned up inline so the user never lands
         on a stale tab.
         """
         from clorch.tmux.navigator import (
-            jump_to_iterm_tab, select_tmux_pane, bring_iterm_to_front,
+            jump_to_tab, select_tmux_pane, bring_terminal_to_front,
             pid_alive,
         )
 
@@ -560,12 +560,12 @@ class OrchestratorApp(App):
         # tmux session: select-window + select-pane (CC mode follows)
         if agent.tmux_window:
             if select_tmux_pane(agent):
-                bring_iterm_to_front()
+                bring_terminal_to_front()
                 self.notify(f"Jumped to {name}")
                 return
 
-        # Plain iTerm: PID → tty → tab
-        if jump_to_iterm_tab(agent):
+        # Plain terminal: PID → tty → tab
+        if jump_to_tab(agent):
             self.notify(f"Jumped to {name}")
             return
 
@@ -615,7 +615,7 @@ class OrchestratorApp(App):
         return tmux
 
     def _open_tmux_tab(self, tmux, window: str) -> None:
-        """Open an iTerm tab attached to a specific tmux window.
+        """Open a terminal tab attached to a specific tmux window.
 
         Uses ``exec tmux new-session`` (no ``-d``) so the shell in the
         new tab is replaced by the tmux client immediately.  A linked
@@ -623,9 +623,7 @@ class OrchestratorApp(App):
         *window*.  ``destroy-unattached`` is set via ``\\;`` *after*
         the attach so the session isn't killed prematurely.
         """
-        import os
         import shlex
-        import subprocess
 
         session = tmux.session
         linked = f"{session}-{window}"
@@ -649,28 +647,13 @@ class OrchestratorApp(App):
             f"\\; set-option destroy-unattached on"
         )
 
-        if os.environ.get("TERM_PROGRAM", "") == "iTerm.app":
-            from clorch.notifications.macos import _escape
-            safe_cmd = _escape(cmd)
-            script = f'''
-                tell application "iTerm2"
-                    tell current window
-                        set newTab to (create tab with default profile)
-                        tell current session of newTab
-                            write text "{safe_cmd}"
-                        end tell
-                    end tell
-                end tell
-            '''
-            subprocess.run(
-                ["osascript", "-e", script],
-                capture_output=True, timeout=5,
-            )
-        else:
-            self.notify(
-                f"Run: {cmd}",
-                severity="information",
-            )
+        from clorch.terminal import get_backend
+        backend = get_backend()
+        if not backend.open_tab(cmd):
+            # Terminal can't open tabs (e.g. Ghostty) — just switch to the
+            # window inside the existing tmux session and bring terminal forward.
+            tmux.select_window(window)
+            backend.bring_to_front()
 
     def _prompt_new_window(self) -> None:
         """Show a modal prompt and create a new tmux window."""

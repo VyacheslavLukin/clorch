@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import shutil
 import subprocess
 
@@ -269,11 +268,12 @@ class TmuxSession:
     def _attach(self) -> None:
         """Attach to the session.
 
-        Uses ``tmux -CC attach`` when ``$TERM_PROGRAM`` is ``iTerm.app``
-        so iTerm renders native windows instead of the raw terminal UI.
+        Uses ``tmux -CC attach`` when the terminal backend supports
+        control mode (e.g. iTerm2) so it renders native windows instead
+        of the raw terminal UI.
         """
-        is_iterm = os.environ.get("TERM_PROGRAM", "") == "iTerm.app"
-        if is_iterm:
+        from clorch.terminal import get_backend
+        if get_backend().supports_control_mode():
             subprocess.run(["tmux", "-CC", "attach-session", "-t", self.session])
         else:
             subprocess.run(["tmux", "attach-session", "-t", self.session])
