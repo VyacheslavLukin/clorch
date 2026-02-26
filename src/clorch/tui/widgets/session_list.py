@@ -7,6 +7,7 @@ from textual.message import Message
 from rich.text import Text
 
 from clorch.state.models import AgentState, ActionItem
+from clorch.terminal.detect import get_terminal_label, normalize_term_program
 from clorch.constants import (
     AgentStatus, STATUS_DISPLAY, SPARKLINE_CHARS, BRAILLE_SPINNER,
     CYAN, GREEN, GREY, PINK, RED, YELLOW,
@@ -37,6 +38,48 @@ class ListHeader(Static):
         self.update(text)
 
 
+class GroupSeparator(ListItem):
+    """Non-selectable separator row showing a terminal group name."""
+
+    DEFAULT_CSS = """
+    GroupSeparator {
+        height: auto;
+        padding: 0 1;
+    }
+    """
+
+    def __init__(self, label: str, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._label = label
+        self.disabled = True
+
+    def compose(self) -> ComposeResult:
+        text = Text()
+        text.append(f"── {self._label} ", style=f"dim {GREY}")
+        text.append("─" * 40, style=f"dim {GREY}")
+        yield Static(text, markup=False)
+
+
+def _agent_terminal_group(agent: AgentState) -> str:
+    """Compute the terminal group key for an agent.
+
+    - If the agent has a ``tmux_window`` → group is ``"tmux"``.
+    - Otherwise → normalized ``term_program`` label.
+    """
+    if agent.tmux_window:
+        return "tmux"
+    return normalize_term_program(agent.term_program)
+
+
+def _group_sort_key(group: str, local_terminal: str) -> tuple[int, str]:
+    """Sort key so local terminal comes first, tmux second, then alphabetical."""
+    if group == local_terminal:
+        return (0, group)
+    if group == "tmux":
+        return (1, group)
+    return (2, group)
+
+
 class SessionRow(ListItem):
     """A single agent row in the session list.
 
@@ -51,10 +94,11 @@ class SessionRow(ListItem):
     }
     """
 
-    def __init__(self, agent: AgentState, row_num: int, **kwargs) -> None:
+    def __init__(self, agent: AgentState, row_num: int, dim: bool = False, **kwargs) -> None:
         super().__init__(**kwargs)
         self.agent = agent
         self._row_num = row_num
+        self._dim = dim
         self._action: ActionItem | None = None
         self._action_focused: bool = False
         self._anim_frame: int = 0
@@ -82,10 +126,12 @@ class SessionRow(ListItem):
             if self.agent.status in (AgentStatus.WORKING, AgentStatus.WAITING_PERMISSION):
                 self._refresh_display()
 
-    def update_row(self, agent: AgentState, row_num: int) -> None:
+    def update_row(self, agent: AgentState, row_num: int, dim: bool | None = None) -> None:
         """Update the row with new agent data."""
         self.agent = agent
         self._row_num = row_num
+        if dim is not None:
+            self._dim = dim
         self._refresh_display()
 
     def _refresh_display(self) -> None:
@@ -213,6 +259,11 @@ class SessionRow(ListItem):
             text.append("[Esc]", style=f"bold {CYAN}")
             text.append(" cancel", style="dim")
 
+        # Dim the entire row for unreachable agents (different terminal, not tmux)
+        if self._dim:
+            for i in range(len(text._spans)):
+                text._spans[i] = text._spans[i]._replace(style=f"dim {GREY}")
+
         return text
 
     @staticmethod
@@ -237,6 +288,11 @@ class SessionList(ListView):
 
     Provides the same public API as AgentTable so the app can use it
     as a drop-in replacement.  Also supports inline action display.
+
+    Agents are grouped by terminal emulator.  The local terminal's
+    group appears first, then tmux, then other terminals alphabetically.
+    Separator rows (``GroupSeparator``) are inserted between groups.
+    Agents in unreachable terminals (not local, not tmux) are dimmed.
     """
 
     DEFAULT_CSS = """
@@ -259,67 +315,176 @@ class SessionList(ListView):
         self._agents: list[AgentState] = []
         self._action_map: dict[str, ActionItem] = {}  # session_id -> ActionItem
         self._focused_letter: str | None = None
+        # Mapping: child index → agent index (None for separators)
+        self._child_to_agent: list[int | None] = []
+        # Ordered agent list after grouping (used for external access)
+        self._ordered_agents: list[AgentState] = []
+        # Dim flags per ordered agent index
+        self._dim_flags: list[bool] = []
+        # Local terminal label (resolved once)
+        self._local_terminal: str = get_terminal_label()
+        # Whether the backend can map PIDs to tabs (False for Ghostty)
+        self._backend_can_resolve: bool = self._check_backend_resolve()
+
+    @staticmethod
+    def _check_backend_resolve() -> bool:
+        """Check if the active terminal backend can map PIDs to tabs."""
+        from clorch.terminal import get_backend
+        backend = get_backend()
+        return getattr(backend, "can_resolve_tabs", lambda: False)()
+
+    def _is_group_reachable(self, group: str) -> bool:
+        """Check if agents in a given terminal group are reachable.
+
+        - Same terminal as us → reachable.
+        - tmux → always reachable (via tmux select-window).
+        - Unknown (no term_program) → reachable only if our backend
+          can resolve tabs (iTerm/Terminal.app can, Ghostty cannot).
+        - Known different terminal → not reachable.
+        """
+        if group == self._local_terminal or group == "tmux":
+            return True
+        if group == "unknown":
+            return self._backend_can_resolve
+        return False
+
+    def _group_agents(self, agents: list[AgentState]) -> tuple[
+        list[AgentState], list[int | None], list[bool], list[tuple[int, str]]
+    ]:
+        """Sort agents into terminal groups and compute child mapping.
+
+        Returns:
+            ordered_agents: agents in grouped + alphabetical order
+            child_to_agent: mapping from child index to agent index (None for separators)
+            dim_flags: whether each agent should be dimmed
+            separators: list of (child_index, label) for separator insertion
+        """
+        local = self._local_terminal
+
+        # Group agents by terminal
+        groups: dict[str, list[AgentState]] = {}
+        for agent in agents:
+            group = _agent_terminal_group(agent)
+            groups.setdefault(group, []).append(agent)
+
+        # Sort each group alphabetically by project name
+        for g in groups.values():
+            g.sort(key=lambda a: a.project_name.lower())
+
+        # Sort groups: local first, tmux second, then others alphabetically
+        sorted_groups = sorted(groups.keys(), key=lambda g: _group_sort_key(g, local))
+
+        ordered: list[AgentState] = []
+        child_map: list[int | None] = []
+        dim_flags: list[bool] = []
+        separators: list[tuple[int, str]] = []
+
+        # Only show separators when there are multiple groups
+        show_separators = len(sorted_groups) > 1
+
+        child_idx = 0
+        for group in sorted_groups:
+            group_agents = groups[group]
+            if show_separators:
+                label = group if group else "unknown"
+                if group == local:
+                    label = f"{label} (local)"
+                separators.append((child_idx, label))
+                child_map.append(None)
+                child_idx += 1
+
+            reachable = self._is_group_reachable(group)
+            for agent in group_agents:
+                agent_idx = len(ordered)
+                ordered.append(agent)
+                dim_flags.append(not reachable)
+                child_map.append(agent_idx)
+                child_idx += 1
+
+        return ordered, child_map, dim_flags, separators
 
     def update_agents(self, agents: list[AgentState]) -> None:
-        """Refresh the list with stable alphabetical sorting.
+        """Refresh the list with grouped terminal sorting.
 
-        Rows are sorted by project name only — status changes never
-        cause rows to jump.  Updates existing rows in-place to avoid
-        flicker; only rebuilds from scratch when the agent *set* changes
-        (new agent appeared or old one disappeared).
+        Agents are grouped by terminal, with separator headers between groups.
+        Updates existing rows in-place when possible to avoid flicker.
         """
-        # Stable sort: alphabetical by project name only.
-        agents = sorted(agents, key=lambda a: a.project_name.lower())
+        ordered, child_map, dim_flags, separators = self._group_agents(agents)
 
-        new_ids = [a.session_id for a in agents]
-        old_ids = [a.session_id for a in self._agents]
+        new_ids = [a.session_id for a in ordered]
+        old_ids = [a.session_id for a in self._ordered_agents]
 
-        if new_ids == old_ids:
+        if new_ids == old_ids and len(child_map) == len(self._child_to_agent):
             # Same agents in same order — update in-place (no flicker)
             self._agents = agents
-            rows = [c for c in self.children if isinstance(c, SessionRow)]
-            for i, (agent, row) in enumerate(zip(agents, rows), 1):
-                row.update_row(agent, i)
-                action = self._action_map.get(agent.session_id)
-                row.set_action(action)
-                if action and self._focused_letter and action.letter == self._focused_letter:
-                    row.set_action_focused(True)
-                else:
-                    row.set_action_focused(False)
+            self._ordered_agents = ordered
+            self._child_to_agent = child_map
+            self._dim_flags = dim_flags
+            agent_num = 0
+            for child in self.children:
+                if isinstance(child, SessionRow):
+                    agent = ordered[agent_num]
+                    agent_num += 1
+                    row_num = agent_num  # 1-based
+                    child.update_row(agent, row_num, dim=dim_flags[agent_num - 1])
+                    action = self._action_map.get(agent.session_id)
+                    child.set_action(action)
+                    if action and self._focused_letter and action.letter == self._focused_letter:
+                        child.set_action_focused(True)
+                    else:
+                        child.set_action_focused(False)
             return
 
-        # Agent set changed — full rebuild
+        # Agent set or grouping changed — full rebuild
         prev_id: str | None = None
-        if self._agents and self.index is not None and 0 <= self.index < len(self._agents):
-            prev_id = self._agents[self.index].session_id
+        if self._ordered_agents and self.index is not None:
+            prev_agent = self.get_selected_agent()
+            if prev_agent:
+                prev_id = prev_agent.session_id
 
         self._agents = agents
+        self._ordered_agents = ordered
+        self._child_to_agent = child_map
+        self._dim_flags = dim_flags
 
         self.clear()
-        for i, agent in enumerate(agents, 1):
-            row = SessionRow(agent, i)
-            action = self._action_map.get(agent.session_id)
-            if action:
-                row.set_action(action)
-                if self._focused_letter and action.letter == self._focused_letter:
-                    row.set_action_focused(True)
-            self.append(row)
-
-        # Restore cursor position by session_id.
-        # Defer via call_after_refresh so the appended items are mounted
-        # before ListView applies the --highlight class.
-        new_index = 0
-        if prev_id is not None:
-            for idx, agent in enumerate(agents):
-                if agent.session_id == prev_id:
-                    new_index = idx
-                    break
+        sep_iter = iter(separators)
+        next_sep = next(sep_iter, None)
+        agent_num = 0
+        for child_idx, agent_idx in enumerate(child_map):
+            if agent_idx is None:
+                # Separator row
+                if next_sep and next_sep[0] == child_idx:
+                    self.append(GroupSeparator(next_sep[1]))
+                    next_sep = next(sep_iter, None)
             else:
-                # Previous agent gone — clamp to valid range
-                old_idx = self.index if self.index is not None else 0
-                new_index = min(old_idx, max(len(agents) - 1, 0))
-        if agents:
-            self.call_after_refresh(setattr, self, "index", new_index)
+                agent = ordered[agent_idx]
+                agent_num += 1
+                dim = dim_flags[agent_idx]
+                row = SessionRow(agent, agent_num, dim=dim)
+                action = self._action_map.get(agent.session_id)
+                if action:
+                    row.set_action(action)
+                    if self._focused_letter and action.letter == self._focused_letter:
+                        row.set_action_focused(True)
+                self.append(row)
+
+        # Restore cursor position by session_id, skipping separators.
+        new_child_index = self._first_agent_child_index()
+        if prev_id is not None:
+            for ci, ai in enumerate(child_map):
+                if ai is not None and ordered[ai].session_id == prev_id:
+                    new_child_index = ci
+                    break
+        if ordered and new_child_index is not None:
+            self.call_after_refresh(setattr, self, "index", new_child_index)
+
+    def _first_agent_child_index(self) -> int | None:
+        """Return the child index of the first actual agent row."""
+        for ci, ai in enumerate(self._child_to_agent):
+            if ai is not None:
+                return ci
+        return None
 
     def update_actions(self, items: list[ActionItem]) -> None:
         """Update the action map and refresh inline action display."""
@@ -349,9 +514,11 @@ class SessionList(ListView):
                 child.set_action_focused(False)
 
     def get_selected_agent(self) -> AgentState | None:
-        """Get the currently highlighted agent."""
-        if self.index is not None and 0 <= self.index < len(self._agents):
-            return self._agents[self.index]
+        """Get the currently highlighted agent (skipping separators)."""
+        if self.index is not None and 0 <= self.index < len(self._child_to_agent):
+            agent_idx = self._child_to_agent[self.index]
+            if agent_idx is not None and agent_idx < len(self._ordered_agents):
+                return self._ordered_agents[agent_idx]
         return None
 
     def get_agent_by_number(self, num: int) -> AgentState | None:
@@ -363,14 +530,28 @@ class SessionList(ListView):
         if num == 0:
             num = 10
         idx = num - 1
-        if 0 <= idx < len(self._agents):
-            return self._agents[idx]
+        if 0 <= idx < len(self._ordered_agents):
+            return self._ordered_agents[idx]
         return None
 
     def move_cursor(self, row: int) -> None:
-        """Move the cursor to a specific row index."""
-        if 0 <= row < len(self._agents):
-            self.index = row
+        """Move the cursor to the child index for the given agent index.
+
+        Accounts for separator rows when translating agent index to
+        child index.
+        """
+        # Find the child index for this agent index
+        for ci, ai in enumerate(self._child_to_agent):
+            if ai == row:
+                self.index = ci
+                return
+
+    def move_cursor_to_agent(self, session_id: str) -> None:
+        """Move the cursor to the child row for a given session_id."""
+        for ci, ai in enumerate(self._child_to_agent):
+            if ai is not None and self._ordered_agents[ai].session_id == session_id:
+                self.index = ci
+                return
 
     def tick_animation(self, frame: int) -> None:
         """Advance the animation frame on all rows."""
@@ -383,3 +564,12 @@ class SessionList(ListView):
         agent = self.get_selected_agent()
         if agent:
             self.post_message(self.AgentHighlighted(agent))
+
+    def is_agent_reachable(self, agent: AgentState) -> bool:
+        """Check if an agent is reachable from the current terminal.
+
+        Uses the same logic as grouping: local and tmux are always
+        reachable; unknown agents are reachable only when the backend
+        supports PID-to-tab mapping (iTerm yes, Ghostty no).
+        """
+        return self._is_group_reachable(_agent_terminal_group(agent))

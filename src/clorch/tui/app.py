@@ -473,11 +473,21 @@ class OrchestratorApp(App):
         Only uses tmux send-keys when the agent actually lives in a tmux
         pane (``tmux_window`` is set by the hook).  Falls back to jumping
         to the terminal tab so the user can approve/deny manually.
+        Agents in unreachable terminals are blocked with a warning.
         """
         from clorch.tmux.navigator import map_agent_to_window, jump_to_tab
         from clorch.tmux.session import TmuxSession
 
         name = agent.project_name or agent.session_id[:12]
+
+        # Reachability check
+        table = self.query_one("#session-list", SessionList)
+        if not table.is_agent_reachable(agent):
+            from clorch.tui.widgets.session_list import _agent_terminal_group
+            remote = _agent_terminal_group(agent)
+            local = table._local_terminal
+            self.notify(f"Cannot reach {name} from {local} (agent in {remote})", severity="warning")
+            return False
 
         # Only attempt tmux send-keys when the hook confirmed the agent
         # is inside a tmux pane (tmux_window is non-empty).  Without this
@@ -525,10 +535,9 @@ class OrchestratorApp(App):
         table = self.query_one("#session-list", SessionList)
         agent = table.get_agent_by_number(num)
         if agent:
-            # Move cursor to that row
+            # Move cursor to that row (accounts for separators)
             idx = num - 1 if num != 0 else 9
-            if 0 <= idx < len(table._agents):
-                table.move_cursor(row=idx)
+            table.move_cursor(row=idx)
             if self._detail_mode != "hidden":
                 self.query_one("#detail-panel", AgentDetail).show_agent(agent)
 
@@ -541,7 +550,8 @@ class OrchestratorApp(App):
         - **plain terminal**: PID → tty → terminal tab activation.
 
         Dead processes are cleaned up inline so the user never lands
-        on a stale tab.
+        on a stale tab.  Agents in unreachable terminals are blocked
+        with a warning.
         """
         from clorch.tmux.navigator import (
             jump_to_tab, select_tmux_pane, bring_terminal_to_front,
@@ -549,6 +559,15 @@ class OrchestratorApp(App):
         )
 
         name = agent.project_name or agent.session_id[:12]
+
+        # Reachability check — can't jump to agent in a different terminal
+        table = self.query_one("#session-list", SessionList)
+        if not table.is_agent_reachable(agent):
+            from clorch.tui.widgets.session_list import _agent_terminal_group
+            remote = _agent_terminal_group(agent)
+            local = table._local_terminal
+            self.notify(f"Cannot reach {name} from {local} (agent in {remote})", severity="warning")
+            return
 
         # Dead process check — remove stale state file immediately
         if agent.pid and not pid_alive(agent.pid):

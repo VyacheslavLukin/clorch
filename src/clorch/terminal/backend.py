@@ -46,6 +46,15 @@ class TerminalBackend(Protocol):
         """
         ...
 
+    def can_resolve_tabs(self) -> bool:
+        """Return ``True`` if the backend can map PIDs to terminal tabs.
+
+        Backends that return an empty ``get_tty_map()`` always should
+        return ``False`` here — only tmux agents are reachable from
+        such terminals.
+        """
+        ...
+
     def supports_control_mode(self) -> bool:
         """Return ``True`` if the terminal supports tmux CC (control) mode."""
         ...

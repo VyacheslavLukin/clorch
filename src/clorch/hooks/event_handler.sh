@@ -94,6 +94,7 @@ CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     --argjson pid "$PPID" \
     --arg tmux_win "${TMUX_WINDOW:-}" \
     --arg tmux_pane "${TMUX_PANE:-}" \
+    --arg term_prog "${TERM_PROGRAM:-}" \
     '
     if .session_id == null or .session_id == "" then .session_id = $sid else . end |
     if (.cwd == null or .cwd == "") and $cwd != "" then .cwd = $cwd else . end |
@@ -104,7 +105,8 @@ CURRENT_STATE="$(echo "$CURRENT_STATE" | jq \
     if .activity_history == null then .activity_history = [0,0,0,0,0,0,0,0,0,0] else . end |
     .pid = $pid |
     .tmux_window = $tmux_win |
-    .tmux_pane = $tmux_pane
+    .tmux_pane = $tmux_pane |
+    if .term_program == null or .term_program == "" then .term_program = $term_prog else . end
     '
 )"
 
@@ -130,6 +132,7 @@ case "$EVENT" in
             --argjson pid "$PPID" \
             --arg tmux_win "${TMUX_WINDOW:-}" \
             --arg tmux_pane "${TMUX_PANE:-}" \
+            --arg term_prog "${TERM_PROGRAM:-}" \
             '{
                 session_id: $sid,
                 status: $status,
@@ -145,7 +148,8 @@ case "$EVENT" in
                 activity_history: [0,0,0,0,0,0,0,0,0,0],
                 pid: $pid,
                 tmux_window: $tmux_win,
-                tmux_pane: $tmux_pane
+                tmux_pane: $tmux_pane,
+                term_program: $term_prog
             }' > "$TEMP_FILE"
         mv "$TEMP_FILE" "$STATE_FILE"
         ;;

@@ -36,6 +36,7 @@ class AgentState:
     # tmux mapping (filled by navigator)
     tmux_window: str = ""
     tmux_pane: str = ""
+    term_program: str = ""
     tool_request_summary: str | None = None
 
     @property
@@ -87,6 +88,7 @@ class AgentState:
             pid=data.get("pid"),
             tmux_window=data.get("tmux_window", ""),
             tmux_pane=data.get("tmux_pane", ""),
+            term_program=data.get("term_program", ""),
             tool_request_summary=data.get("tool_request_summary"),
         )
 

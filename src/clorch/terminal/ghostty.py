@@ -108,5 +108,8 @@ class GhosttyBackend:
             log.debug("Ghostty new window failed: %s", exc)
             return False
 
+    def can_resolve_tabs(self) -> bool:
+        return False
+
     def supports_control_mode(self) -> bool:
         return False

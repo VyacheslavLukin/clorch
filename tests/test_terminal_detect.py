@@ -5,7 +5,10 @@ from unittest.mock import patch
 
 import pytest
 
-from clorch.terminal.detect import get_backend, _backend_from_name
+from clorch.terminal.detect import (
+    get_backend, _backend_from_name,
+    get_terminal_label, normalize_term_program,
+)
 from clorch.terminal.iterm import ITermBackend
 from clorch.terminal.apple_terminal import AppleTerminalBackend
 from clorch.terminal.ghostty import GhosttyBackend
@@ -137,3 +140,45 @@ class TestBackendFromName:
 
     def test_unknown(self):
         assert isinstance(_backend_from_name("kitty"), GhosttyBackend)
+
+
+class TestGetTerminalLabel:
+    """Tests for get_terminal_label() helper."""
+
+    def test_iterm(self):
+        assert get_terminal_label("iTerm.app") == "iTerm"
+
+    def test_ghostty(self):
+        assert get_terminal_label("ghostty") == "Ghostty"
+
+    def test_apple_terminal(self):
+        assert get_terminal_label("Apple_Terminal") == "Terminal.app"
+
+    def test_tmux(self):
+        assert get_terminal_label("tmux") == "tmux"
+
+    def test_unknown_passthrough(self):
+        assert get_terminal_label("alacritty") == "alacritty"
+
+    def test_empty_reads_env(self):
+        with patch.dict("os.environ", {"TERM_PROGRAM": "iTerm.app"}, clear=False):
+            assert get_terminal_label() == "iTerm"
+
+    def test_empty_no_env(self):
+        with patch.dict("os.environ", {"TERM_PROGRAM": ""}, clear=False):
+            assert get_terminal_label() == "unknown"
+
+
+class TestNormalizeTermProgram:
+    """Tests for normalize_term_program() helper."""
+
+    def test_known_values(self):
+        assert normalize_term_program("iTerm.app") == "iTerm"
+        assert normalize_term_program("ghostty") == "Ghostty"
+        assert normalize_term_program("Apple_Terminal") == "Terminal.app"
+
+    def test_unknown_passthrough(self):
+        assert normalize_term_program("wezterm") == "wezterm"
+
+    def test_empty_returns_unknown(self):
+        assert normalize_term_program("") == "unknown"

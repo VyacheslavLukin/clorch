@@ -144,6 +144,9 @@ class ITermBackend:
         # AppleScript returns empty on success for this command
         return True
 
+    def can_resolve_tabs(self) -> bool:
+        return True
+
     def supports_control_mode(self) -> bool:
         """iTerm2 supports ``tmux -CC`` control mode."""
         return True

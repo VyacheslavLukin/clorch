@@ -115,6 +115,9 @@ class AppleTerminalBackend:
         _run_applescript(script)
         return True
 
+    def can_resolve_tabs(self) -> bool:
+        return True
+
     def supports_control_mode(self) -> bool:
         """Terminal.app does not support tmux CC mode."""
         return False

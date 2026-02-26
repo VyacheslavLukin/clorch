@@ -69,6 +69,26 @@ class TestAgentStateFromJsonFile:
         assert agent.last_compact_time == "2026-02-22T11:00:00Z"
         assert agent.task_completed_count == 5
 
+    def test_agent_state_term_program_from_json(self, make_agent_state):
+        """term_program loads from JSON file."""
+        import json
+        from pathlib import Path
+
+        # Write a state file with term_program
+        path = make_agent_state(session_id="term-test")
+        data = json.loads(path.read_text())
+        data["term_program"] = "iTerm.app"
+        path.write_text(json.dumps(data))
+
+        agent = AgentState.from_json_file(path)
+        assert agent.term_program == "iTerm.app"
+
+    def test_agent_state_term_program_default_empty(self, make_agent_state):
+        """term_program defaults to empty string when missing."""
+        path = make_agent_state(session_id="no-term")
+        agent = AgentState.from_json_file(path)
+        assert agent.term_program == ""
+
     def test_agent_state_from_json_file_missing_fields(self, tmp_state_dir):
         """Loading JSON with only session_id fills defaults for missing fields."""
         import json
@@ -93,6 +113,7 @@ class TestAgentStateFromJsonFile:
         assert agent.task_completed_count == 0
         assert agent.started_at == ""
         assert agent.notification_message is None
+        assert agent.term_program == ""
         assert len(agent.activity_history) == 10
         assert all(v == 0 for v in agent.activity_history)
 
