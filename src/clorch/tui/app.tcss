@@ -79,6 +79,15 @@ Screen {
 
 /* -- Sub-panels: each bordered -- */
 
+#settings-panel {
+    height: auto;
+    max-height: 3;
+    border: round #4C566A;
+    border-title-color: #88C0D0;
+    border-title-style: bold;
+    padding: 0 1;
+}
+
 #detail-panel {
     height: auto;
     max-height: 8;

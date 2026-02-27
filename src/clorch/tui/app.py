@@ -17,6 +17,7 @@ from clorch.tui.widgets.header_bar import HeaderBar
 from clorch.tui.widgets.context_footer import ContextFooter
 from clorch.tui.widgets.telemetry_panel import TelemetryPanel
 from clorch.tui.widgets.event_log import EventLog
+from clorch.tui.widgets.settings_panel import SettingsPanel
 
 
 class PromptScreen(ModalScreen[str | None]):
@@ -111,6 +112,10 @@ class HelpScreen(ModalScreen[None]):
         text.append("  [d]", style=f"bold {CYAN}")
         text.append("       Cycle detail: normal/expanded/hidden\n\n")
 
+        text.append("SETTINGS\n", style=f"bold {YELLOW}")
+        text.append("  [s]", style=f"bold {CYAN}")
+        text.append("       Toggle sound notifications\n\n")
+
         text.append("TMUX MANAGEMENT\n", style=f"bold {YELLOW}")
         text.append("  [N]", style=f"bold {CYAN}")
         text.append("       Create new tmux window\n")
@@ -177,6 +182,9 @@ class OrchestratorApp(App):
                 yield ListHeader(id="list-header")
                 yield SessionList(id="session-list")
             with Vertical(id="right-panel"):
+                settings = SettingsPanel(id="settings-panel")
+                settings.border_title = "Settings"
+                yield settings
                 detail = AgentDetail(id="detail-panel")
                 detail.border_title = "Detail"
                 yield detail
@@ -248,7 +256,8 @@ class OrchestratorApp(App):
                 if delta > 0 and agent.last_tool:
                     event_log.write_event(agent.project_name, "\u2699", agent.last_tool, "cyan")
 
-        # --- Toast on state changes ---
+        # --- Toast on state changes + sound alerts ---
+        sound_status: AgentStatus | None = None
         current_states: dict[str, AgentStatus] = {}
         for agent in agents:
             current_states[agent.session_id] = agent.status
@@ -260,7 +269,15 @@ class OrchestratorApp(App):
                 _, new_label, _ = STATUS_DISPLAY[agent.status]
                 severity = "warning" if agent.needs_attention else "information"
                 self.notify(f"{name}: {old_label} \u2192 {new_label}", severity=severity)
+                # Track highest-priority attention status for sound
+                if agent.needs_attention and sound_status is None:
+                    sound_status = agent.status
         self._prev_states = current_states
+
+        # Play sound alert (once per poll cycle, highest priority)
+        if sound_status and self.query_one("#settings-panel", SettingsPanel).sound_enabled:
+            from clorch.notifications.sound import play_status_sound
+            play_status_sound(sound_status)
 
         # --- Extended history update (bucketed) ---
         for agent in agents:
@@ -341,6 +358,14 @@ class OrchestratorApp(App):
                 event.prevent_default()
                 return
 
+        # s — toggle sound notifications
+        if key == "s":
+            panel = self.query_one("#settings-panel", SettingsPanel)
+            enabled = panel.toggle_sound()
+            self.notify(f"Sound {'ON' if enabled else 'OFF'}")
+            event.prevent_default()
+            return
+
         # Shift+N: new tmux window
         if key == "N":
             self._prompt_new_window()
@@ -376,9 +401,22 @@ class OrchestratorApp(App):
             event.prevent_default()
             return
 
-        # y/n: approve/deny the focused action
-        if key == "y" and self._focused_action:
-            self._approve_action(self._focused_action)
+        # y/n: approve/deny the focused action (or auto-select if single PERM)
+        if key == "y":
+            if self._focused_action:
+                self._approve_action(self._focused_action)
+            else:
+                approvable = [i for i in self._action_items if i.actionable]
+                if len(approvable) == 1:
+                    self._approve_action(approvable[0])
+                elif approvable:
+                    self._focused_action = approvable[0]
+                    self.query_one("#session-list", SessionList).set_action_focus(approvable[0].letter)
+                    self._update_footer_mode()
+                    name = approvable[0].agent.project_name or approvable[0].agent.session_id[:12]
+                    self.notify(f"Multiple PERMs — focused [{approvable[0].letter}] {name}. Press [y] again to approve, or select another.")
+                else:
+                    return  # no PERM items, let fall through to a-z
             event.prevent_default()
             return
         if key == "n" and self._focused_action:
@@ -447,6 +485,7 @@ class OrchestratorApp(App):
 
         self._has_ever_approved = True
         self.notify(f"Approved: {name}")
+        self.query_one("#event-log-panel", EventLog).write_event(name, "\u2714", "approved", "green")
         self._clear_focused_action()
 
     def _deny_action(self, action: ActionItem) -> None:
@@ -465,6 +504,7 @@ class OrchestratorApp(App):
 
         self._has_ever_approved = True
         self.notify(f"Denied: {name}")
+        self.query_one("#event-log-panel", EventLog).write_event(name, "\u2718", "denied", "red")
         self._clear_focused_action()
 
     def _send_approval(self, agent: AgentState, key: str) -> bool:
@@ -528,6 +568,8 @@ class OrchestratorApp(App):
 
         self._has_ever_approved = True
         self.notify(f"Approved {approved}/{len(approvable)} permission requests")
+        event_log = self.query_one("#event-log-panel", EventLog)
+        event_log.write_event("all", "\u2714", f"batch approved {approved}/{len(approvable)}", "green")
         self._clear_focused_action()
 
     def _select_agent_by_number(self, num: int) -> None:
