@@ -201,7 +201,8 @@ class TestGhosttyBackend:
 
     def test_open_tab_returns_false(self):
         backend = GhosttyBackend()
-        assert backend.open_tab("echo hello") is False
+        with patch("subprocess.run", side_effect=OSError("not found")):
+            assert backend.open_tab("echo hello") is False
 
     def test_supports_control_mode(self):
         backend = GhosttyBackend()

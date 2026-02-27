@@ -75,6 +75,15 @@ fi
 # PPID is the Claude Code process — stored so the TUI can detect dead sessions.
 # TMUX is set when running inside a tmux pane — detect the window name.
 CWD_FROM_INPUT="$(echo "$INPUT_JSON" | jq -r '.cwd // empty')"
+# Detect VS Code when TERM_PROGRAM is not set (extension runs outside a terminal).
+# Check env vars first, then fall back to parent process path (.vscode/extensions/).
+if [[ -z "${TERM_PROGRAM:-}" ]]; then
+    if [[ -n "${VSCODE_PID:-}" || -n "${VSCODE_IPC_HOOK_CLI:-}" ]]; then
+        TERM_PROGRAM="vscode"
+    elif ps -p "$PPID" -o command= 2>/dev/null | grep -q '\.vscode/extensions/'; then
+        TERM_PROGRAM="vscode"
+    fi
+fi
 TMUX_WINDOW=""
 TMUX_PANE=""
 # Detect tmux window AND pane ONLY if Claude Code's tty is actually inside a tmux pane.

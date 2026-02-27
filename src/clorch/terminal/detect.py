@@ -11,7 +11,9 @@ _TERM_LABELS: dict[str, str] = {
     "iTerm.app": "iTerm",
     "Apple_Terminal": "Terminal.app",
     "ghostty": "Ghostty",
+    "WarpTerminal": "Warp",
     "tmux": "tmux",
+    "vscode": "VS Code",
 }
 
 
