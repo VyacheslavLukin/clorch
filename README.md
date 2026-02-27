@@ -8,7 +8,7 @@ Mission control for [Claude Code](https://docs.anthropic.com/en/docs/claude-code
 
 You run 10–20 Claude Code sessions at once. One needs a file change approved, another is waiting for a skill, a third just finished its plan — and you're alt-tabbing through a wall of terminal tabs trying to keep up.
 
-Clorch is mission control. One dashboard shows every active session: what it's doing, what it needs. Approve a permission right here, or jump to the right tab in one keystroke.
+**Clorch** is mission control. One dashboard shows every active session: what it's doing, what it needs. Approve a permission right here, or jump to the right tab in one keystroke.
 
 ## Features
 
