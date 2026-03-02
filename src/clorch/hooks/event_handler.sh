@@ -92,11 +92,11 @@ TMUX_SESSION=""
 # wrong when the agent runs in an iTerm tab while a tmux server is up.
 _CLAUDE_TTY="$(ps -p "$PPID" -o tty= 2>/dev/null | tr -d ' ')"
 if [[ -n "$_CLAUDE_TTY" && "$_CLAUDE_TTY" != "??" ]]; then
-    _TMUX_INFO="$(tmux list-panes -a -F '#{pane_tty} #{window_name} #{pane_index} #{session_name}' 2>/dev/null \
-        | awk -v tty="/dev/$_CLAUDE_TTY" '$1 == tty { print $2, $3, $4; exit }')" || true
-    TMUX_WINDOW="$(echo "$_TMUX_INFO" | awk '{print $1}')"
-    TMUX_PANE="$(echo "$_TMUX_INFO" | awk '{print $2}')"
-    TMUX_SESSION="$(echo "$_TMUX_INFO" | awk '{print $3}')"
+    _TMUX_INFO="$(tmux list-panes -a -F '#{pane_tty}|||#{window_name}|||#{pane_index}|||#{session_name}' 2>/dev/null \
+        | awk -v tty="/dev/$_CLAUDE_TTY" -F '\\|\\|\\|' '$1 == tty { print $2; print $3; print $4; exit }')" || true
+    if [[ -n "$_TMUX_INFO" ]]; then
+        { read -r TMUX_WINDOW; read -r TMUX_PANE; read -r TMUX_SESSION; } <<< "$_TMUX_INFO"
+    fi
 fi
 # Collect git data from CWD (branch name and dirty file count)
 GIT_BRANCH=""
