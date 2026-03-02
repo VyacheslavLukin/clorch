@@ -35,6 +35,14 @@ class AgentDetail(Static):
     def __init__(self, **kwargs) -> None:
         super().__init__("", **kwargs)
         self._agent: AgentState | None = None
+        self._session_usage: object | None = None  # SessionUsage from usage tracker
+
+    def set_usage(self, session_usage) -> None:
+        """Set per-agent usage data (SessionUsage or None)."""
+        self._session_usage = session_usage
+        # Re-render if we have an agent displayed
+        if self._agent is not None:
+            self.show_agent(self._agent)
 
     def show_agent(self, agent: AgentState | None) -> None:
         self._agent = agent
@@ -178,6 +186,20 @@ class AgentDetail(Static):
             text.append(f"{agent.task_completed_count}", style=GREEN)
         text.append("\n")
 
+        # Token usage line (if data available)
+        if self._session_usage is not None:
+            su = self._session_usage
+            text.append(f"{'Tokens':<{_LABEL_W}s}", style=f"dim {GREY}")
+            text.append(self._fmt_tokens(su.tokens.total_input), style="white")
+            text.append(" in", style="dim")
+            text.append(" / ", style=f"dim {GREY}")
+            text.append(self._fmt_tokens(su.tokens.output_tokens), style="white")
+            text.append(" out", style="dim")
+            if su.cost >= 0.01:
+                text.append("  ~$", style="dim")
+                text.append(f"{su.cost:.2f}", style=f"bold {GREEN}")
+            text.append("\n")
+
         # Extended sparkline (use all available history, up to 20 chars)
         text.append(f"{'Activity':<{_LABEL_W}s}", style=f"dim {GREY}")
         sparkline = self._render_extended_sparkline(agent.activity_history)
@@ -193,6 +215,15 @@ class AgentDetail(Static):
             text.append(f'"{msg}"', style=f"italic {YELLOW}")
 
         self.update(text)
+
+    @staticmethod
+    def _fmt_tokens(n: int) -> str:
+        """Format token count: 1234567 -> '1.2M', 12345 -> '12K', 999 -> '999'."""
+        if n >= 1_000_000:
+            return f"{n / 1_000_000:.1f}M"
+        if n >= 1_000:
+            return f"{n / 1_000:.0f}K"
+        return str(n)
 
     @staticmethod
     def _render_extended_sparkline(history: list[int]) -> Text:

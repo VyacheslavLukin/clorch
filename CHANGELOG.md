@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0] — 2026-03-02
+
+### Added
+- **Usage overview**: today's Claude Code cost, tokens, cache hit rate, and burn rate in header bar
+  - Parses `~/.claude/projects/*/*.jsonl` session logs with incremental byte-offset tailing
+  - Per-model pricing: Opus 4.6/4.5, Opus 4.1/4, Sonnet, Haiku 4.5, Haiku 3.5
+  - Cost displayed as API equivalent (`~$28.61`) — useful for Max subscribers to see what they'd pay
+  - In/Out token counts exclude cache reads to show real consumption
+  - Cache hit rate, message count, burn rate ($/hr rolling 10-min window)
+  - Per-agent token usage and cost in detail panel
+- Midnight rollover: usage stats reset at local midnight
+- Polling: JSONL files scanned every 10s (active sessions incremental, full scan every 60s)
+
 ## [0.2.0] — 2026-02-27
 
 ### Added

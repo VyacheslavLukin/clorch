@@ -23,3 +23,4 @@ RULES_PATH = Path.home() / ".config" / "clorch" / "rules.yaml"
 
 # Polling
 STATE_POLL_INTERVAL_MS = 500
+USAGE_POLL_INTERVAL = 10.0

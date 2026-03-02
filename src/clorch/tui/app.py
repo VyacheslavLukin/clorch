@@ -189,6 +189,8 @@ class OrchestratorApp(App):
         self._telemetry_tick: int = 0
         self._rules_config: RulesConfig = RulesConfig()
         self._skip_warned: set[str] = set()  # session IDs already warned about no-tmux skip
+        self._usage_tracker = None  # lazy-init UsageTracker
+        self._usage_summary = None  # cached UsageSummary
 
     def compose(self) -> ComposeResult:
         yield HeaderBar(id="header-bar")
@@ -217,9 +219,12 @@ class OrchestratorApp(App):
         self._cleanup_timer = self.set_interval(30, self._run_cleanup)
         self._perm_check_timer = self.set_interval(5, self._check_stale_permissions)
         self._anim_timer = self.set_interval(ANIM_INTERVAL, self._tick_animation)
+        from clorch.config import USAGE_POLL_INTERVAL
+        self._usage_timer = self.set_interval(USAGE_POLL_INTERVAL, self._poll_usage)
         self._load_rules()
         self._run_cleanup()
         self._poll_state()
+        self._poll_usage()
         self._apply_tmux_statusbar()
         self._init_header_tmux()
 
@@ -344,7 +349,14 @@ class OrchestratorApp(App):
         # --- Update detail + telemetry if visible ---
         if self._detail_mode != "hidden":
             selected = table.get_selected_agent()
-            self.query_one("#detail-panel", AgentDetail).show_agent(selected)
+            detail_panel = self.query_one("#detail-panel", AgentDetail)
+            # Set per-agent usage data before rendering
+            if selected and self._usage_summary:
+                session_usage = self._usage_summary.sessions.get(selected.session_id)
+                detail_panel.set_usage(session_usage)
+            else:
+                detail_panel.set_usage(None)
+            detail_panel.show_agent(selected)
             selected_id = selected.session_id if selected else None
             self.query_one("#telemetry-panel", TelemetryPanel).update_agents(
                 agents, selected_id, self._extended_history
@@ -753,6 +765,40 @@ class OrchestratorApp(App):
         tmux = TmuxSession()
         if tmux.is_available() and tmux.exists():
             self.query_one("#header-bar", HeaderBar).set_tmux_session(tmux.session)
+
+    def _poll_usage(self) -> None:
+        """Poll Claude Code JSONL logs for token usage and cost data."""
+        from clorch.usage.tracker import UsageTracker
+
+        if self._usage_tracker is None:
+            self._usage_tracker = UsageTracker()
+
+        # Build list of active session JSONL paths from current agents
+        # Agent cwd gives us the project dir → map to ~/.claude/projects/<slug>/*.jsonl
+        active_paths: list[str] = []
+        try:
+            agents = self._manager.scan()
+            from clorch.usage.parser import CLAUDE_PROJECTS_DIR
+            if CLAUDE_PROJECTS_DIR.is_dir():
+                for agent in agents:
+                    if not agent.cwd:
+                        continue
+                    # Claude Code uses the cwd path as project slug (with - replacing /)
+                    slug = agent.cwd.replace("/", "-")
+                    if slug.startswith("-"):
+                        slug = slug[1:]  # strip leading dash
+                    project_dir = CLAUDE_PROJECTS_DIR / slug
+                    if project_dir.is_dir():
+                        for jsonl in project_dir.glob("*.jsonl"):
+                            active_paths.append(str(jsonl))
+        except Exception:
+            pass
+
+        try:
+            self._usage_summary = self._usage_tracker.poll(active_paths or None)
+            self.query_one("#header-bar", HeaderBar).update_usage(self._usage_summary)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Tmux window / pane management

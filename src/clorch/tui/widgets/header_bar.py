@@ -11,7 +11,7 @@ from clorch.constants import GREEN, RED, YELLOW, PINK, GREY, CYAN, BRAILLE_SPINN
 
 
 class HeaderBar(Static):
-    """1-line header: CLORCH --- tmux:session --- counts --- N agents."""
+    """1-line header: status counts + usage overview inline."""
 
     DEFAULT_CSS = """
     HeaderBar {
@@ -27,6 +27,7 @@ class HeaderBar(Static):
         self._anim_frame: int = 0
         self._summary: StatusSummary | None = None
         self._yolo: bool = False
+        self._usage: object | None = None  # UsageSummary, lazy import
         # tools/min tracking
         self._prev_total_tools: int = 0
         self._prev_time: float = time.monotonic()
@@ -46,6 +47,11 @@ class HeaderBar(Static):
         self._anim_frame = frame
         if self._summary and (self._summary.working > 0 or self._yolo):
             self._refresh_display()
+
+    def update_usage(self, usage) -> None:
+        """Update the usage summary for the second header line."""
+        self._usage = usage
+        self._refresh_display()
 
     def update_summary(self, summary: StatusSummary) -> None:
         self._summary = summary
@@ -113,4 +119,66 @@ class HeaderBar(Static):
         text.append(" \u2500\u2500\u2500 ", style=f"dim {GREY}")
         text.append(f"{summary.total} agents", style=f"bold {CYAN}")
 
+        # Inline usage stats (today)
+        if self._usage is not None:
+            self._render_usage_inline(text, self._usage)
+
         self.update(text)
+
+    @staticmethod
+    def _fmt_tokens(n: int) -> str:
+        """Format token count: 1234567 -> '1.2M', 12345 -> '12K', 999 -> '999'."""
+        if n >= 1_000_000:
+            return f"{n / 1_000_000:.1f}M"
+        if n >= 1_000:
+            return f"{n / 1_000:.0f}K"
+        return str(n)
+
+    def _render_usage_inline(self, text: Text, usage) -> None:
+        """Append today's usage stats inline after agent count."""
+        text.append(" \u2500\u2500\u2500 ", style=f"dim {GREY}")
+        text.append("Today: ", style="dim")
+
+        # Cost (API equivalent)
+        cost = usage.total_cost
+        if cost >= 100:
+            cost_color = RED
+        elif cost >= 50:
+            cost_color = YELLOW
+        else:
+            cost_color = GREEN
+        text.append("~$", style="dim")
+        text.append(f"{cost:.2f}", style=f"bold {cost_color}")
+
+        text.append(" \u2502 ", style=f"dim {GREY}")
+
+        # In/Out tokens (input excludes cache_read — only new tokens)
+        text.append("In: ", style="dim")
+        text.append(self._fmt_tokens(usage.total_input), style="bold white")
+        text.append(" Out: ", style="dim")
+        text.append(self._fmt_tokens(usage.total_output), style="bold white")
+
+        text.append(" \u2502 ", style=f"dim {GREY}")
+
+        # Cache hit rate
+        cache = usage.cache_hit_rate
+        if cache >= 80:
+            cache_color = GREEN
+        elif cache >= 50:
+            cache_color = YELLOW
+        else:
+            cache_color = RED
+        text.append("Cache: ", style="dim")
+        text.append(f"{cache:.0f}%", style=f"bold {cache_color}")
+
+        text.append(" \u2502 ", style=f"dim {GREY}")
+
+        # Messages
+        text.append("Msgs: ", style="dim")
+        text.append(f"{usage.message_count}", style=f"bold {CYAN}")
+
+        # Burn rate (only if meaningful)
+        if usage.burn_rate >= 0.01:
+            text.append(" \u2502 ", style=f"dim {GREY}")
+            text.append("Burn: ", style="dim")
+            text.append(f"${usage.burn_rate:.2f}/hr", style=f"bold {YELLOW}")
