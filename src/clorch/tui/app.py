@@ -741,8 +741,8 @@ class OrchestratorApp(App):
                 tmux = TmuxSession(session_name=agent.tmux_session or None)
                 if jump_to_tmux_tab(tmux, agent.tmux_window):
                     bring_terminal_to_front()
-                    self.notify(f"Jumped to {name}")
-                    return
+                self.notify(f"Jumped to {name}")
+                return
 
         # Plain terminal: PID → tty → tab
         if jump_to_tab(agent):
