@@ -37,9 +37,11 @@ class AgentState:
     git_dirty_count: int = 0
     # Process tracking — used to detect dead sessions
     pid: int | None = None
-    # tmux mapping (filled by navigator)
+    # tmux mapping (filled by hook / navigator)
     tmux_window: str = ""
     tmux_pane: str = ""
+    tmux_session: str = ""
+    tmux_window_index: str = ""
     term_program: str = ""
     tool_request_summary: str | None = None
 
@@ -95,6 +97,8 @@ class AgentState:
             pid=data.get("pid"),
             tmux_window=data.get("tmux_window", ""),
             tmux_pane=data.get("tmux_pane", ""),
+            tmux_session=data.get("tmux_session", ""),
+            tmux_window_index=data.get("tmux_window_index", ""),
             term_program=data.get("term_program", ""),
             tool_request_summary=data.get("tool_request_summary"),
         )

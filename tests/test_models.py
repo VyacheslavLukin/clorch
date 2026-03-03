@@ -89,6 +89,24 @@ class TestAgentStateFromJsonFile:
         agent = AgentState.from_json_file(path)
         assert agent.term_program == ""
 
+    def test_agent_state_tmux_session_from_json(self, make_agent_state):
+        """tmux_session loads from JSON file."""
+        import json
+
+        path = make_agent_state(session_id="tmux-sess-test")
+        data = json.loads(path.read_text())
+        data["tmux_session"] = "my-session"
+        path.write_text(json.dumps(data))
+
+        agent = AgentState.from_json_file(path)
+        assert agent.tmux_session == "my-session"
+
+    def test_agent_state_tmux_session_default_empty(self, make_agent_state):
+        """tmux_session defaults to empty string when missing."""
+        path = make_agent_state(session_id="no-tmux-sess")
+        agent = AgentState.from_json_file(path)
+        assert agent.tmux_session == ""
+
     def test_agent_state_from_json_file_missing_fields(self, tmp_state_dir):
         """Loading JSON with only session_id fills defaults for missing fields."""
         import json

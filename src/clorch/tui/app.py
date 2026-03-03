@@ -650,9 +650,10 @@ class OrchestratorApp(App):
         # guard, cwd-based matching can send keystrokes to an unrelated
         # zsh pane that happens to share the same working directory.
         if agent.tmux_window:
-            tmux = TmuxSession()
+            tmux = TmuxSession(session_name=agent.tmux_session or None)
             if tmux.is_available() and tmux.exists():
-                target = tmux.get_pane_target(agent.tmux_window, agent.tmux_pane or "0")
+                window_target = agent.tmux_window_index or agent.tmux_window
+                target = tmux.get_pane_target(window_target, agent.tmux_pane or "0")
                 ok = tmux.send_keys(target, key, literal=True)
                 if ok:
                     tmux.send_keys(target, "Enter")
@@ -712,9 +713,10 @@ class OrchestratorApp(App):
         with a warning.
         """
         from clorch.tmux.navigator import (
-            jump_to_tab, select_tmux_pane, bring_terminal_to_front,
-            pid_alive,
+            jump_to_tab, jump_to_tmux_tab, select_tmux_pane,
+            bring_terminal_to_front, pid_alive,
         )
+        from clorch.tmux.session import TmuxSession
 
         name = agent.project_name or agent.session_id[:12]
 
@@ -734,10 +736,12 @@ class OrchestratorApp(App):
             self.notify(f"{name}: process dead, removed", severity="warning")
             return
 
-        # tmux session: select-window + select-pane (CC mode follows)
+        # tmux session: select-window + select-pane, then switch terminal tab
         if agent.tmux_window:
             if select_tmux_pane(agent):
-                bring_terminal_to_front()
+                tmux = TmuxSession(session_name=agent.tmux_session or None)
+                if jump_to_tmux_tab(tmux, agent.tmux_window):
+                    bring_terminal_to_front()
                 self.notify(f"Jumped to {name}")
                 return
 
