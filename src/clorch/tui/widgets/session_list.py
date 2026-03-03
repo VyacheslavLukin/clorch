@@ -23,8 +23,8 @@ class ListHeader(Static):
         text = Text()
         # Col 1: accent (2) + Col 2: num (3) + separator (1) = 6 chars
         text.append("      ", style="dim")
-        # Col 3: project name (12) + separator (1)
-        text.append(f"{'PROJECT':<12s} ", style=f"dim {GREY}")
+        # Col 3: project name (16) + separator (1)
+        text.append(f"{'PROJECT':<16s} ", style=f"dim {GREY}")
         # Col 3a: session name (30) + separator (1)
         text.append(f"{'SESSION':<30s} ", style=f"dim {GREY}")
         # Col 4: status (1 space + 8)
@@ -153,7 +153,7 @@ class SessionRow(ListItem):
     # Fixed column widths for vertical alignment across all rows.
     _COL_ACCENT = 2     # "┃ " or "  "
     _COL_NUM = 3        # "[a]" or " 1 "
-    _COL_PROJECT = 12   # project name padded
+    _COL_PROJECT = 16   # project name padded
     _COL_SESSION = 30   # session name padded
     _COL_BRANCH = 10    # git branch padded
     _COL_STATUS = 8     # ">>> WORK" / "[!] PERM" — symbol(3) + space + label(4)
@@ -164,10 +164,10 @@ class SessionRow(ListItem):
     _COL_UPTIME = 8     # "1h 23m" right-aligned
     _COL_SPARK = 10     # sparkline chars
 
-    # Sum of all fixed columns: accent(2) + num(3) + sep(1) + project(12) + sep(1)
+    # Sum of all fixed columns: accent(2) + num(3) + sep(1) + project(16) + sep(1)
     # + session(30) + sep(1) + status(1+8) + stale(5) + tool(1+12) + tcnt(4) + ecnt(3)
     # + uptime(8) + branch(1+10) + sep(2) + sparkline(10)
-    _FIXED_PREFIX_WIDTH = 115
+    _FIXED_PREFIX_WIDTH = 119
 
     def _render_row(self) -> Text:
         """Render the row as Rich Text with fixed-width columns."""

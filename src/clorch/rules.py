@@ -40,6 +40,7 @@ class RulesConfig:
     """Top-level rules configuration."""
 
     yolo: bool = False
+    sound: bool = False
     rules: list[Rule] = field(default_factory=list)
     default: str = "ask"  # "ask" | "approve" | "deny"
 
@@ -64,6 +65,7 @@ def load_rules(path: Path | None = None) -> RulesConfig:
         return RulesConfig()
 
     yolo = bool(data.get("yolo", False))
+    sound = bool(data.get("sound", False))
     default = str(data.get("default", "ask"))
     if default not in ("ask", "approve", "deny"):
         default = "ask"
@@ -76,7 +78,31 @@ def load_rules(path: Path | None = None) -> RulesConfig:
         if tools and action in ("approve", "deny", "ask"):
             rules.append(Rule(tools=tools, action=action, pattern=pattern))
 
-    return RulesConfig(yolo=yolo, rules=rules, default=default)
+    return RulesConfig(yolo=yolo, sound=sound, rules=rules, default=default)
+
+
+def save_rules(config: RulesConfig, path: Path | None = None) -> None:
+    """Save current config back to the YAML file.
+
+    Preserves rule definitions, updates toggle flags (yolo, sound).
+    """
+    if path is None:
+        path = Path("~/.config/clorch/rules.yaml").expanduser()
+    else:
+        path = Path(path).expanduser()
+
+    data: dict = {}
+    if path.exists():
+        try:
+            data = yaml.safe_load(path.read_text()) or {}
+        except Exception:
+            data = {}
+
+    data["yolo"] = config.yolo
+    data["sound"] = config.sound
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
 
 
 def evaluate(config: RulesConfig, tool_name: str, tool_summary: str) -> str:

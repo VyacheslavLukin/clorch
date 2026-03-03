@@ -12,7 +12,7 @@ from clorch.state.manager import StateManager
 from clorch.state.models import AgentState, StatusSummary, ActionItem, build_action_queue
 from clorch.constants import AgentStatus, ANIM_INTERVAL, TELEMETRY_HISTORY_LEN, TELEMETRY_BUCKET_TICKS
 from clorch.config import RULES_PATH
-from clorch.rules import RulesConfig, load_rules, evaluate
+from clorch.rules import RulesConfig, load_rules, save_rules, evaluate
 from clorch.tui.widgets.session_list import SessionList, ListHeader
 from clorch.tui.widgets.agent_detail import AgentDetail
 from clorch.tui.widgets.header_bar import HeaderBar
@@ -234,6 +234,8 @@ class OrchestratorApp(App):
         settings = self.query_one("#settings-panel", SettingsPanel)
         settings.set_rules_count(len(self._rules_config.rules))
         settings.set_yolo(self._rules_config.yolo)
+        if self._rules_config.sound:
+            settings.toggle_sound()
         self.query_one("#header-bar", HeaderBar).set_yolo(self._rules_config.yolo)
 
     def _check_stale_permissions(self) -> None:
@@ -437,11 +439,12 @@ class OrchestratorApp(App):
         self._action_items = remaining
 
     def _toggle_yolo(self) -> None:
-        """Toggle YOLO mode on/off (runtime override of config)."""
+        """Toggle YOLO mode on/off and persist to config."""
         self._rules_config.yolo = not self._rules_config.yolo
         yolo = self._rules_config.yolo
         self.query_one("#header-bar", HeaderBar).set_yolo(yolo)
         self.query_one("#settings-panel", SettingsPanel).set_yolo(yolo)
+        save_rules(self._rules_config, RULES_PATH)
         if yolo:
             self.notify("YOLO mode ON \u2014 auto-approve all (tmux only)", severity="warning")
         else:
@@ -478,6 +481,8 @@ class OrchestratorApp(App):
         if key == "s":
             panel = self.query_one("#settings-panel", SettingsPanel)
             enabled = panel.toggle_sound()
+            self._rules_config.sound = enabled
+            save_rules(self._rules_config, RULES_PATH)
             self.notify(f"Sound {'ON' if enabled else 'OFF'}")
             event.prevent_default()
             return

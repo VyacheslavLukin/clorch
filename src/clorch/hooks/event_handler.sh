@@ -29,9 +29,13 @@ mkdir -p "$STATE_DIR"
 # Read JSON from stdin
 INPUT_JSON="$(cat)"
 
-# Extract session_id — bail out if missing
+# Extract session_id — bail out if missing or invalid
 SESSION_ID="$(echo "$INPUT_JSON" | jq -r '.session_id // empty')"
 if [[ -z "$SESSION_ID" ]]; then
+    exit 0
+fi
+# Guard against path traversal: only allow alphanumeric, hyphens, underscores
+if [[ ! "$SESSION_ID" =~ ^[a-zA-Z0-9_-]+$ ]]; then
     exit 0
 fi
 
