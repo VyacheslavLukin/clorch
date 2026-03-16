@@ -406,6 +406,11 @@ class SessionList(ListView):
         # Whether the backend can map PIDs to tabs (False for Ghostty)
         self._backend_can_resolve: bool = self._check_backend_resolve()
 
+    @property
+    def ordered_agents(self) -> list[AgentState]:
+        """Agents in current display order (after grouping/sorting)."""
+        return self._ordered_agents
+
     @staticmethod
     def _check_backend_resolve() -> bool:
         """Check if the active terminal backend can map PIDs to tabs."""

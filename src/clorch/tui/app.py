@@ -374,7 +374,7 @@ class OrchestratorApp(App):
             detail_panel.show_agent(selected)
             selected_id = selected.session_id if selected else None
             self.query_one("#telemetry-panel", TelemetryPanel).update_agents(
-                agents, selected_id, self._extended_history
+                table.ordered_agents, selected_id, self._extended_history
             )
 
         # First-permission hint (one-time toast)
