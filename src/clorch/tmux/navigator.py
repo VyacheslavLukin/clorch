@@ -60,8 +60,9 @@ def map_agent_to_window(agent: AgentState, tmux: TmuxSession) -> str | None:
 def jump_to_tmux_tab(tmux: TmuxSession, window: str) -> bool:
     """Activate the terminal tab whose tmux client is viewing *window*.
 
-    Scans all tmux clients to find one whose active window matches,
-    then maps its tty to a terminal tab via the active backend.
+    Scans tmux clients (filtered to the session with an attached client)
+    to find one whose active window matches, then maps its tty to a
+    terminal tab via the active backend.
 
     Falls back to matching the window name in terminal tab titles.
 
@@ -70,9 +71,12 @@ def jump_to_tmux_tab(tmux: TmuxSession, window: str) -> bool:
     from clorch.terminal import get_backend
     backend = get_backend()
 
+    client_session = _resolve_client_session(tmux)
+
     # Strategy 1: find client whose active window matches
     result = tmux.run_command(
-        "list-clients", "-F", "#{client_tty}\t#{window_name}",
+        "list-clients", "-t", client_session,
+        "-F", "#{client_tty}\t#{window_name}",
         check=False,
     )
     if result.returncode == 0 and result.stdout.strip():
@@ -122,16 +126,25 @@ def select_tmux_pane(agent: AgentState) -> bool:
 
     Targets the window by index first (unambiguous), falling back to
     name when no index is stored in the state file.
+
+    When sessions are grouped (linked sessions), the agent's recorded
+    ``tmux_session`` may not have an attached client.  We resolve to
+    the session that does so ``select-window`` actually affects the
+    visible client / CC mode tab.
     """
     if not agent.tmux_window:
         return False
     tmux = TmuxSession(session_name=agent.tmux_session or None)
     if not (tmux.is_available() and tmux.exists()):
         return False
+
+    # Resolve to the session with an attached client (handles linked sessions)
+    client_session = _resolve_client_session(tmux)
+
     # Prefer window index — names can be duplicated across windows,
     # and tmux refuses to select-window by an ambiguous name.
     window_target = agent.tmux_window_index or agent.tmux_window
-    target = f"{tmux.session}:{window_target}"
+    target = f"{client_session}:{window_target}"
     result = tmux.run_command("select-window", "-t", target, check=False)
     if result.returncode != 0:
         return False
@@ -297,6 +310,55 @@ bring_iterm_to_front = bring_terminal_to_front
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
+
+def _resolve_client_session(tmux: TmuxSession) -> str:
+    """Find a session with an attached client in the same group.
+
+    Linked/grouped sessions share windows but each has an independent
+    active-window pointer.  The agent's state file may record a linked
+    session that no longer has a client attached.  This walks the
+    session group to find one that does, so ``select-window`` affects
+    the visible client (and triggers CC mode tab switches in iTerm).
+
+    Returns the session name with a client, or the original session
+    name as a fallback.
+    """
+    # Quick check: does the given session already have a client?
+    result = tmux.run_command(
+        "list-clients", "-t", tmux.session, "-F", "1",
+        check=False,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return tmux.session
+
+    # Find session group
+    result = tmux.run_command(
+        "display-message", "-t", tmux.session, "-p", "#{session_group}",
+        check=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return tmux.session
+    group = result.stdout.strip()
+
+    # Find a session in the same group with a client
+    result = tmux.run_command(
+        "list-sessions",
+        "-F", "#{session_name}\t#{session_group}\t#{session_attached}",
+        check=False,
+    )
+    if result.returncode != 0:
+        return tmux.session
+    for line in result.stdout.strip().splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 3 and parts[1] == group and parts[2] != "0":
+            log.debug(
+                "Resolved session %s → %s (group %s)",
+                tmux.session, parts[0], group,
+            )
+            return parts[0]
+
+    return tmux.session
+
 
 def _normalise_path(p: str) -> str:
     """Resolve symlinks and expand ``~`` so paths compare reliably."""
