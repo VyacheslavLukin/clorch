@@ -891,9 +891,6 @@ class OrchestratorApp(App):
         #    destroy-unattached kills linked session →
         #    monitor detects it → kill-window cleans up the tmux window
         cmd = (
-            f"(trap '' HUP; sleep 1; while tmux has-session -t {q_linked} 2>/dev/null; "
-            f"do sleep 1; done; "
-            f"tmux kill-window -t {q_session}:{q_window} 2>/dev/null) & "
             f"tmux kill-session -t {q_linked} 2>/dev/null; "
             f"sleep 0.2; "
             f"tmux new-session -d -t {q_session} -s {q_linked}; "
@@ -902,6 +899,9 @@ class OrchestratorApp(App):
             f"tmux set-option -t {q_linked} set-titles-string {q_window}; "
             f"tmux set-hook -t {q_linked} client-attached "
             f"'set-option destroy-unattached on'; "
+            f"(trap '' HUP; while tmux has-session -t {q_linked} 2>/dev/null; "
+            f"do sleep 1; done; "
+            f"tmux kill-window -t {q_session}:{q_window} 2>/dev/null) & "
             f"exec tmux attach-session -t {q_linked}"
         )
 

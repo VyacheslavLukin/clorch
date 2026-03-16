@@ -104,8 +104,8 @@ class TestOpenTmuxTab:
         tmux.select_window.assert_called_once_with("mywindow")
         backend.bring_to_front.assert_called_once()
 
-    def test_monitor_has_initial_sleep(self):
-        """Background monitor should sleep before polling to avoid race."""
+    def test_monitor_starts_after_session_created(self):
+        """Background monitor must launch after new-session to avoid race."""
         app = self._make_app()
         tmux = self._make_tmux()
 
@@ -117,8 +117,9 @@ class TestOpenTmuxTab:
             app._open_tmux_tab(tmux, "mywindow")
 
         cmd = backend.open_tab.call_args[0][0]
-        # Monitor subshell should start with sleep before the while loop
-        assert "(trap '' HUP; sleep 1; while tmux has-session" in cmd
+        new_session_pos = cmd.index("new-session -d")
+        monitor_pos = cmd.index("(trap '' HUP;")
+        assert new_session_pos < monitor_pos
 
     def test_linked_session_naming(self):
         """Linked session should be named session-window."""
