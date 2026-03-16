@@ -84,7 +84,6 @@ class TestAgentStateSubagentsParsing:
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         path = make_agent_state(
             session_id="s1",
-            subagent_count=2,
             subagents={
                 "agent-1": {
                     "agent_id": "agent-1",
@@ -104,13 +103,13 @@ class TestAgentStateSubagentsParsing:
         )
         agent = AgentState.from_json_file(path)
         assert len(agent.subagents) == 2
-        assert agent.subagent_count == 2
+        assert agent.subagent_count == 1  # only 1 running sub-agent
 
     def test_from_json_no_subagents_backward_compat(self, make_agent_state):
-        path = make_agent_state(session_id="s2", subagent_count=3)
+        path = make_agent_state(session_id="s2")
         agent = AgentState.from_json_file(path)
         assert agent.subagents == []
-        assert agent.subagent_count == 3
+        assert agent.subagent_count == 0
 
     def test_pruning_old_completed(self, make_agent_state):
         now = datetime.now(timezone.utc)

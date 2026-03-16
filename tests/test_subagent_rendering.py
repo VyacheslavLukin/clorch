@@ -16,7 +16,11 @@ class TestSessionListSubagentSuffix:
         agent = AgentState(
             session_id="x",
             project_name="myproj",
-            subagent_count=3,
+            subagents=[
+                SubAgentInfo(agent_id="a", status="running"),
+                SubAgentInfo(agent_id="b", status="running"),
+                SubAgentInfo(agent_id="c", status="running"),
+            ],
         )
         # Session list now uses simple [Ns] format
         project = agent.project_name
@@ -28,7 +32,6 @@ class TestSessionListSubagentSuffix:
         agent = AgentState(
             session_id="x",
             project_name="myproj",
-            subagent_count=0,
         )
         project = agent.project_name
         if agent.subagent_count > 0:

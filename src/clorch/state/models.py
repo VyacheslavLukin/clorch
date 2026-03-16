@@ -63,7 +63,6 @@ class AgentState:
     started_at: str = ""
     tool_count: int = 0
     error_count: int = 0
-    subagent_count: int = 0
     subagents: list[SubAgentInfo] = field(default_factory=list)
     compact_count: int = 0
     last_compact_time: str = ""
@@ -81,6 +80,11 @@ class AgentState:
     tmux_window_index: str = ""
     term_program: str = ""
     tool_request_summary: str | None = None
+
+    @property
+    def subagent_count(self) -> int:
+        """Count of currently running sub-agents."""
+        return len(self.running_subagents)
 
     @property
     def uptime(self) -> str:
@@ -168,7 +172,6 @@ class AgentState:
             started_at=data.get("started_at", ""),
             tool_count=data.get("tool_count", 0),
             error_count=data.get("error_count", 0),
-            subagent_count=data.get("subagent_count", 0),
             subagents=subagents,
             compact_count=data.get("compact_count", 0),
             last_compact_time=data.get("last_compact_time", ""),
