@@ -918,47 +918,62 @@ class OrchestratorApp(App):
             tmux.select_window(window)
             backend.bring_to_front()
 
+    _WINDOW_NAMES = [
+        "cobra", "falcon", "phoenix", "titan", "nova", "viper", "storm",
+        "raven", "blaze", "ghost", "wolf", "hawk", "lynx", "bolt", "apex",
+        "onyx", "pulse", "spark", "drift", "shade", "frost", "ember",
+        "comet", "flare", "surge", "vapor", "orbit", "prism", "quest",
+        "rebel", "sonic", "turbo", "zen", "neon", "echo", "helix",
+    ]
+
+    def _pick_window_name(self, existing: list[str]) -> str:
+        """Pick a random fun name that isn't already used."""
+        import random
+
+        available = [n for n in self._WINDOW_NAMES if n not in existing]
+        if available:
+            return random.choice(available)
+        # Fallback: append number
+        return f"win-{len(existing) + 1}"
+
     def _prompt_new_window(self) -> None:
-        """Show a modal prompt and create a new tmux window."""
+        """Create a new tmux window with an auto-generated name."""
+        from clorch.tmux.session import TmuxSession
 
-        def on_result(name: str | None) -> None:
-            if not name:
-                return
-            from clorch.tmux.session import TmuxSession
+        tmux = TmuxSession()
+        if not tmux.is_available():
+            self.notify("tmux not installed", severity="error")
+            return
 
-            tmux = TmuxSession()
-            if not tmux.is_available():
-                self.notify("tmux not installed", severity="error")
-                return
+        if not tmux.exists():
+            existing: list[str] = []
+            name = self._pick_window_name(existing)
+            tmux.run_command(
+                "new-session",
+                "-d",
+                "-s",
+                tmux.session,
+                "-n",
+                name,
+            )
+            tmux._apply_options()
+            tmux._apply_keybindings()
+        else:
+            existing = [w["name"] for w in tmux.list_windows()]
+            name = self._pick_window_name(existing)
+            tmux.add_window(name)
 
-            if not tmux.exists():
-                # Create session with this window as the first
-                tmux.run_command(
-                    "new-session",
-                    "-d",
-                    "-s",
-                    tmux.session,
-                    "-n",
-                    name,
-                )
-                tmux._apply_options()
-                tmux._apply_keybindings()
-            else:
-                # Check if window already exists — reattach instead of creating a duplicate
-                existing = [w["name"] for w in tmux.list_windows()]
-                if name not in existing:
-                    tmux.add_window(name)
-
-            # Resolve window index — more robust than name which tmux may rename
-            win_index = None
-            for w in tmux.list_windows():
-                if w["name"] == name:
-                    win_index = w["index"]
-                    break
-            self._open_tmux_tab(tmux, name, win_index=win_index)
-            self.notify(f"Opened window: {name}")
-
-        self.push_screen(PromptScreen("New window name:", placeholder="backend"), on_result)
+        # Resolve window index — more robust than name which tmux may rename
+        win_index = None
+        for w in tmux.list_windows():
+            if w["name"] == name:
+                win_index = w["index"]
+                break
+        if win_index is None:
+            self.notify(f"Failed to create window: {name}", severity="error")
+            return
+        self._open_tmux_tab(tmux, name, win_index=win_index)
+        self.notify(f"Opened window: {name}")
 
     def _split_agent_window(self, horizontal: bool) -> None:
         """Split the selected agent's tmux window."""
