@@ -54,7 +54,6 @@ def _seed_state(state_dir: Path, session_id: str, extra: dict | None = None) -> 
         "project_name": "test",
         "last_event": "SessionStart",
         "last_event_time": "2026-03-17T10:00:00Z",
-        "subagent_count": 0,
         "subagents": {},
     }
     if extra:
@@ -63,30 +62,44 @@ def _seed_state(state_dir: Path, session_id: str, extra: dict | None = None) -> 
 
 
 class TestSubagentStart:
-    def test_valid_agent_id_increments_count_and_adds_to_dict(self, state_dir):
+    def test_valid_agent_id_adds_to_dict(self, state_dir):
         _seed_state(state_dir, "s1")
         state = _run_event(state_dir, "s1", "SubagentStart", {
             "agent_id": "sub-abc",
             "agent_type": "Explore",
         })
-        assert state["subagent_count"] == 1
         assert "sub-abc" in state["subagents"]
         assert state["subagents"]["sub-abc"]["status"] == "running"
+        assert state["subagents"]["sub-abc"]["agent_type"] == "Explore"
 
-    def test_empty_agent_id_does_not_increment_count(self, state_dir):
+    def test_empty_agent_id_leaves_dict_empty(self, state_dir):
         _seed_state(state_dir, "s1")
         state = _run_event(state_dir, "s1", "SubagentStart", {
             "agent_id": "",
             "agent_type": "unknown",
         })
-        assert state["subagent_count"] == 0
+        assert state["subagents"] == {}
+
+    def test_invalid_agent_id_treated_as_empty(self, state_dir):
+        _seed_state(state_dir, "s1")
+        state = _run_event(state_dir, "s1", "SubagentStart", {
+            "agent_id": "../../bad",
+            "agent_type": "Explore",
+        })
+        assert state["subagents"] == {}
+
+    def test_agent_id_with_spaces_treated_as_empty(self, state_dir):
+        _seed_state(state_dir, "s1")
+        state = _run_event(state_dir, "s1", "SubagentStart", {
+            "agent_id": "has spaces",
+            "agent_type": "Explore",
+        })
         assert state["subagents"] == {}
 
 
 class TestSubagentStop:
-    def test_valid_agent_id_decrements_count_and_marks_completed(self, state_dir):
+    def test_valid_agent_id_marks_completed(self, state_dir):
         _seed_state(state_dir, "s1", extra={
-            "subagent_count": 1,
             "subagents": {
                 "sub-abc": {
                     "agent_id": "sub-abc",
@@ -99,19 +112,32 @@ class TestSubagentStop:
         state = _run_event(state_dir, "s1", "SubagentStop", {
             "agent_id": "sub-abc",
         })
-        assert state["subagent_count"] == 0
         assert state["subagents"]["sub-abc"]["status"] == "completed"
 
-    def test_empty_agent_id_does_not_decrement_count(self, state_dir):
-        _seed_state(state_dir, "s1", extra={"subagent_count": 2})
+    def test_empty_agent_id_leaves_dict_unchanged(self, state_dir):
+        _seed_state(state_dir, "s1", extra={
+            "subagents": {
+                "sub-abc": {
+                    "agent_id": "sub-abc",
+                    "status": "running",
+                },
+            },
+        })
         state = _run_event(state_dir, "s1", "SubagentStop", {
             "agent_id": "",
         })
-        assert state["subagent_count"] == 2
+        assert state["subagents"]["sub-abc"]["status"] == "running"
 
-    def test_count_floor_is_zero(self, state_dir):
-        _seed_state(state_dir, "s1", extra={"subagent_count": 0})
-        state = _run_event(state_dir, "s1", "SubagentStop", {
-            "agent_id": "sub-xyz",
+    def test_invalid_agent_id_treated_as_empty(self, state_dir):
+        _seed_state(state_dir, "s1", extra={
+            "subagents": {
+                "sub-abc": {
+                    "agent_id": "sub-abc",
+                    "status": "running",
+                },
+            },
         })
-        assert state["subagent_count"] == 0
+        state = _run_event(state_dir, "s1", "SubagentStop", {
+            "agent_id": "has spaces",
+        })
+        assert state["subagents"]["sub-abc"]["status"] == "running"

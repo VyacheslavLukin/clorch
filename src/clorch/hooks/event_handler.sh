@@ -346,6 +346,9 @@ case "$EVENT" in
 
     SubagentStart)
         AGENT_ID="$(echo "$INPUT_JSON" | jq -r '.agent_id // empty')"
+        if [[ -n "$AGENT_ID" && ! "$AGENT_ID" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            AGENT_ID=""
+        fi
         AGENT_TYPE="$(echo "$INPUT_JSON" | jq -r '.agent_type // "unknown"')"
 
         echo "$CURRENT_STATE" | jq \
@@ -357,7 +360,6 @@ case "$EVENT" in
             '
             .last_event = $last_event |
             .last_event_time = $last_event_time |
-            .subagent_count = (if $agent_id != "" then ((.subagent_count // 0) + 1) else (.subagent_count // 0) end) |
             .subagents = ((.subagents // {}) |
                 if $agent_id != "" then
                     .[$agent_id] = {
@@ -373,6 +375,9 @@ case "$EVENT" in
 
     SubagentStop)
         AGENT_ID="$(echo "$INPUT_JSON" | jq -r '.agent_id // empty')"
+        if [[ -n "$AGENT_ID" && ! "$AGENT_ID" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            AGENT_ID=""
+        fi
         LAST_MSG="$(echo "$INPUT_JSON" | jq -r '.last_assistant_message // "" | .[0:200]')"
         TRANSCRIPT="$(echo "$INPUT_JSON" | jq -r '.agent_transcript_path // ""')"
 
@@ -386,7 +391,6 @@ case "$EVENT" in
             '
             .last_event = $last_event |
             .last_event_time = $last_event_time |
-            .subagent_count = (if $agent_id != "" then ([0, ((.subagent_count // 0) - 1)] | max) else (.subagent_count // 0) end) |
             .subagents = ((.subagents // {}) |
                 if $agent_id != "" then
                     if .[$agent_id] then

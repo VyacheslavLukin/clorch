@@ -11,6 +11,7 @@ from clorch.constants import (
     RED,
     SPARKLINE_CHARS,
     YELLOW,
+    SubAgentStatus,
     context_pct_color,
     model_context_capacity,
 )
@@ -120,7 +121,7 @@ class TelemetryPanel(Static):
             for sa in visible:
                 text.append("\n")
                 sa_name = (sa.agent_type or "?")[:_NAME_W - 2]
-                if sa.status == "running":
+                if sa.status == SubAgentStatus.RUNNING:
                     text.append("  >>> ", style=f"bold {GREEN}")
                     text.append(f"{sa_name:<{_NAME_W - 2}s}", style=GREEN)
                     sa_suffix = sa.duration

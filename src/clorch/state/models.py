@@ -7,18 +7,18 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from clorch.constants import ACTIVITY_HISTORY_LEN, ATTENTION_STATUSES, AgentStatus
+from clorch.constants import ACTIVITY_HISTORY_LEN, ATTENTION_STATUSES, AgentStatus, SubAgentStatus
 
 SUBAGENT_RETENTION_SECONDS = 300
 
 
-@dataclass
+@dataclass(frozen=True)
 class SubAgentInfo:
     """Info about a single sub-agent spawned by a parent session."""
 
     agent_id: str
     agent_type: str = ""
-    status: str = "running"  # "running" | "completed"
+    status: SubAgentStatus = SubAgentStatus.RUNNING
     started_at: str = ""
     completed_at: str = ""
     last_message: str = ""
@@ -32,7 +32,7 @@ class SubAgentInfo:
             if not start:
                 return "0s"
             started = datetime.fromisoformat(start.replace("Z", "+00:00"))
-            if self.status == "completed" and self.completed_at:
+            if self.status == SubAgentStatus.COMPLETED and self.completed_at:
                 end = datetime.fromisoformat(self.completed_at.replace("Z", "+00:00"))
             else:
                 end = datetime.now(timezone.utc)
@@ -108,12 +108,12 @@ class AgentState:
     @property
     def running_subagents(self) -> list[SubAgentInfo]:
         """Sub-agents currently running."""
-        return [s for s in self.subagents if s.status == "running"]
+        return [s for s in self.subagents if s.status == SubAgentStatus.RUNNING]
 
     @property
     def completed_subagents(self) -> list[SubAgentInfo]:
         """Sub-agents that have completed."""
-        return [s for s in self.subagents if s.status == "completed"]
+        return [s for s in self.subagents if s.status == SubAgentStatus.COMPLETED]
 
     def visible_subagents(self, limit: int = 6) -> list[SubAgentInfo]:
         """Sub-agents to display: running first, then completed, capped at *limit*."""
@@ -142,14 +142,14 @@ class AgentState:
                 si = SubAgentInfo(
                     agent_id=info.get("agent_id", aid),
                     agent_type=info.get("agent_type", ""),
-                    status=info.get("status", "running"),
+                    status=info.get("status", SubAgentStatus.RUNNING),
                     started_at=info.get("started_at", ""),
                     completed_at=info.get("completed_at", ""),
                     last_message=info.get("last_message", ""),
                     transcript_path=info.get("transcript_path", ""),
                 )
                 # Prune completed sub-agents older than retention period
-                if si.status == "completed" and si.completed_at:
+                if si.status == SubAgentStatus.COMPLETED and si.completed_at:
                     try:
                         completed = datetime.fromisoformat(si.completed_at.replace("Z", "+00:00"))
                         if (now - completed).total_seconds() > SUBAGENT_RETENTION_SECONDS:
