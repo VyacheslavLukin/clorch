@@ -805,6 +805,7 @@ class OrchestratorApp(App):
                 return
             # Fallback: no tab found via tty/window mapping; use select-window.
             if select_tmux_pane(agent):
+                bring_terminal_to_front()
                 self.notify(f"Jumped to {name}")
                 return
 
