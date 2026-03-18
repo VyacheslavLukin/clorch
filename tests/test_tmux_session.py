@@ -1,4 +1,4 @@
-"""Tests for TmuxSession.send_keys() and get_pane_target()."""
+"""Tests for TmuxSession.send_keys(), get_pane_target(), and rename_window()."""
 from __future__ import annotations
 
 import subprocess
@@ -42,6 +42,31 @@ class TestSendKeys:
         with patch.object(tmux, "run_command") as mock_run:
             mock_run.return_value = MagicMock(returncode=1)
             result = tmux.send_keys("test:win.0", "y")
+
+        assert result is False
+
+
+class TestRenameWindow:
+    """Tests for TmuxSession.rename_window()."""
+
+    def test_rename_window_success(self):
+        """Returns True and calls rename-window with correct target."""
+        tmux = TmuxSession(session_name="test")
+        with patch.object(tmux, "run_command") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            result = tmux.rename_window("mywin", "newname")
+
+        assert result is True
+        mock_run.assert_called_once_with(
+            "rename-window", "-t", "test:mywin", "newname", check=False,
+        )
+
+    def test_rename_window_failure(self):
+        """Returns False when tmux command exits non-zero."""
+        tmux = TmuxSession(session_name="test")
+        with patch.object(tmux, "run_command") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1)
+            result = tmux.rename_window("mywin", "newname")
 
         assert result is False
 
