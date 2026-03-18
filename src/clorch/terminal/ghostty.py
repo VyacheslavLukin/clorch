@@ -161,16 +161,21 @@ class GhosttyBackend:
         source_cmd = f"source {path} && rm -f {path}"
 
         script = f'''
+            set prevClip to the clipboard
             tell application "Ghostty" to activate
             delay 0.2
             tell application "System Events"
                 tell process "Ghostty"
                     click menu item "New Tab" of menu "File" of menu bar 1
                     delay 0.3
-                    keystroke "{source_cmd}"
+                    set the clipboard to "{source_cmd}"
+                    keystroke "v" using command down
+                    delay 0.05
                     key code 36
                 end tell
             end tell
+            delay 0.1
+            set the clipboard to prevClip
         '''
         ok, err = _run_applescript(script)
         if not ok:
