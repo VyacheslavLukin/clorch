@@ -130,12 +130,19 @@ class TmuxSession:
         """
         self.run_command("select-window", "-t", f"{self.session}:{window}")
 
+    # Nord Aurora colors cycled across linked sessions for visual distinction.
+    _SESSION_COLORS = ("#A3BE8C", "#88C0D0", "#BF616A", "#EBCB8B", "#B48EAD")
+    _session_color_index = 0
+
     def create_linked_session(self, window: str) -> str:
         """Create a grouped session pinned to a specific window.
 
         A linked session shares the same window set as the main session
         but can independently select which window is active.  When the
         client detaches the linked session is automatically destroyed.
+
+        Each linked session gets a distinct status-left color so the user
+        can immediately tell which client they are looking at.
 
         Returns the linked session name.
         """
@@ -161,6 +168,18 @@ class TmuxSession:
             "destroy-unattached", "on",
             check=False,
         )
+
+        # Color-coded status-left so linked sessions are visually distinct
+        color = self._SESSION_COLORS[
+            TmuxSession._session_color_index % len(self._SESSION_COLORS)
+        ]
+        TmuxSession._session_color_index += 1
+        self.run_command(
+            "set-option", "-t", linked,
+            "status-left", f"#[fg={color},bold] ● {window} #[default]",
+            check=False,
+        )
+
         return linked
 
     def split_window(
