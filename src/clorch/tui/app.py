@@ -542,6 +542,12 @@ class OrchestratorApp(App):
             event.prevent_default()
             return
 
+        # Shift+W: rename selected agent's tmux window
+        if key == "W":
+            self._rename_selected_window()
+            event.prevent_default()
+            return
+
         # Shift+X: kill selected agent's tmux window
         if key == "X":
             self._kill_agent_window()
@@ -1077,6 +1083,35 @@ class OrchestratorApp(App):
             self.notify(f"Killed window: {name}")
         else:
             self.notify(f"Failed to kill {name}", severity="error")
+
+    def _rename_selected_window(self) -> None:
+        """Prompt for a new name and rename the selected agent's tmux window."""
+        tmux = self._get_tmux()
+        if not tmux:
+            return
+
+        table = self.query_one("#session-list", SessionList)
+        agent = table.get_selected_agent()
+        if not agent:
+            self.notify("No agent selected", severity="warning")
+            return
+
+        from clorch.tmux.navigator import map_agent_to_window
+
+        window = map_agent_to_window(agent, tmux)
+        if not window:
+            self.notify(f"No tmux window for {agent.project_name}", severity="warning")
+            return
+
+        def on_result(new_name: str | None) -> None:
+            if not new_name:
+                return
+            if tmux.rename_window(window, new_name):
+                self.notify(f"Renamed to '{new_name}'")
+            else:
+                self.notify("Rename failed", severity="error")
+
+        self.push_screen(PromptScreen("Rename window:", placeholder=window), on_result)
 
     def _reattach_agent_window(self) -> None:
         """Open an iTerm tab attached to the selected agent's tmux window."""

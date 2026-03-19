@@ -208,6 +208,13 @@ class TmuxSession:
         result = self.run_command(*cmd, check=False)
         return result.returncode == 0
 
+    def rename_window(self, window: str, new_name: str) -> bool:
+        """Rename *window* to *new_name*. Returns ``True`` on success."""
+        result = self.run_command(
+            "rename-window", "-t", f"{self.session}:{window}", new_name, check=False
+        )
+        return result.returncode == 0
+
     # ------------------------------------------------------------------
     # Keystroke control
     # ------------------------------------------------------------------
