@@ -11,3 +11,4 @@ build/
 .claude/
 .ruff_cache/
 .worktrees/
+.plans/
