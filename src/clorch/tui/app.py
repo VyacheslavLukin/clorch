@@ -806,6 +806,15 @@ class OrchestratorApp(App):
         if agent.tmux_window:
             tmux = TmuxSession(session_name=agent.tmux_session or None)
             if jump_to_tmux_tab(tmux, agent.tmux_window):
+                # select-pane without select-window: focuses the right pane
+                # without the session-wide side-effect that breaks shared sessions.
+                if agent.tmux_pane:
+                    window_target = agent.tmux_window
+                    tmux.run_command(
+                        "select-pane", "-t",
+                        f"{tmux.session}:{window_target}.{agent.tmux_pane}",
+                        check=False,
+                    )
                 bring_terminal_to_front()
                 self.notify(f"Jumped to {name}")
                 return

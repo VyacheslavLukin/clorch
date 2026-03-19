@@ -141,6 +141,57 @@ class TestJumpToSessionTmuxBranch:
         assert not jumped_calls
 
 
+class TestJumpToSessionPaneSelection:
+    """After jump_to_tmux_tab succeeds, select-pane must focus the right pane."""
+
+    def _run_with_pane(self, agent):
+        app = _make_app()
+        table_mock = MagicMock()
+        table_mock.is_agent_reachable.return_value = True
+        tmux_instance = MagicMock()
+        tmux_instance.session = "claude"
+
+        with (
+            patch.object(type(app), "query_one", return_value=table_mock),
+            patch("clorch.tmux.navigator.pid_alive", return_value=True),
+            patch("clorch.tmux.session.TmuxSession", return_value=tmux_instance),
+            patch("clorch.tmux.navigator.jump_to_tmux_tab", return_value=True),
+            patch("clorch.tmux.navigator.select_tmux_pane", return_value=False),
+            patch("clorch.tmux.navigator.bring_terminal_to_front"),
+            patch("clorch.tmux.navigator.jump_to_tab", return_value=False),
+        ):
+            app._jump_to_session(agent)
+        return tmux_instance
+
+    def test_select_pane_called_with_window_name(self):
+        """select-pane uses window name (not stale index) for targeting."""
+        agent = _make_agent(tmux_window="lynx", tmux_pane="2")
+        agent.tmux_window_index = "5"  # stale index — must NOT be used
+        tmux = self._run_with_pane(agent)
+
+        tmux.run_command.assert_called_once_with(
+            "select-pane", "-t", "claude:lynx.2", check=False,
+        )
+
+    def test_select_pane_called_for_each_pane(self):
+        """Different agents in the same window jump to different panes."""
+        targets = []
+        for pane_id in ("0", "1", "2"):
+            agent = _make_agent(tmux_window="lynx", tmux_pane=pane_id)
+            tmux = self._run_with_pane(agent)
+            call = tmux.run_command.call_args
+            targets.append(call[0][2])  # the -t argument
+
+        assert targets == ["claude:lynx.0", "claude:lynx.1", "claude:lynx.2"]
+
+    def test_no_select_pane_when_pane_empty(self):
+        """When agent has no tmux_pane, select-pane is skipped."""
+        agent = _make_agent(tmux_window="lynx", tmux_pane="")
+        tmux = self._run_with_pane(agent)
+
+        tmux.run_command.assert_not_called()
+
+
 class TestJumpToSessionDeadProcess:
     """Dead-process path uses StateManager.remove_session() (not direct file access)."""
 
