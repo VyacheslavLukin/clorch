@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "clorch"
-version = "0.3.0"
+version = "0.4.0"
 description = "Orchestrator dashboard for multiple Claude Code sessions in tmux"
 readme = "README.md"
 license = "MIT"
